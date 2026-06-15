@@ -1,0 +1,73 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id          String        @id @default(cuid())
+  clerkUserId String        @unique @map("clerk_user_id")
+  email       String        @unique
+  createdAt   DateTime      @default(now()) @map("created_at")
+  uploads     Upload[]
+  reports     Report[]
+  transactions Transaction[]
+
+  @@map("users")
+}
+
+model Upload {
+  id           String        @id @default(cuid())
+  userId       String        @map("user_id")
+  fileName     String        @map("file_name")
+  status       String        @default("parsed")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reports      Report[]
+  transactions Transaction[]
+
+  @@index([userId])
+  @@map("uploads")
+}
+
+model Transaction {
+  id          String   @id @default(cuid())
+  uploadId    String   @map("upload_id")
+  userId      String   @map("user_id")
+  date        DateTime
+  description String
+  amount      Decimal  @db.Decimal(14, 2)
+  type        String
+  category    String
+  confidence  Decimal  @db.Decimal(4, 2)
+  createdAt   DateTime @default(now()) @map("created_at")
+  upload      Upload   @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([uploadId])
+  @@index([userId])
+  @@map("transactions")
+}
+
+model Report {
+  id           String   @id @default(cuid())
+  uploadId     String   @map("upload_id")
+  userId       String   @map("user_id")
+  summary      String
+  insightsJson Json     @map("insights_json")
+  createdAt    DateTime @default(now()) @map("created_at")
+  upload       Upload   @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([uploadId])
+  @@index([userId])
+  @@map("reports")
+}
