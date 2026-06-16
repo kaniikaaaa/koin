@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useEffect, useMemo, useState, type ChangeEvent } from "react"
-import { ArrowRight, FileText, RefreshCw, Sparkles, Trash2, Upload } from "lucide-react"
+import { ArrowRight, BarChart3, FileText, RefreshCw, Sparkles, Trash2, Upload } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -15,155 +15,164 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import {
-  buildMoneyReport,
-  categorizeTransactions,
+  analyzeMoneyCsv,
+  analyzeMoneyCsvFiles,
+  analyzeSampleCsvs,
   formatCurrency,
   formatPercent,
   getMoneyMetrics,
+  getMonthlyMetrics,
+  getWorkspaceTransactions,
   moneyCategories,
-  parseMoneyCsv,
+  removeWorkspaceTransaction,
   sampleCsv,
+  sampleCsvStatements,
+  updateWorkspaceTransactionCategory,
+  type MoneyAnalysisResult,
   type MoneyCategory,
-  type MoneyTransaction,
+  type MoneyFilesAnalysisResult,
+  type MoneyWorkspace,
 } from "@/lib/moneymirror"
-import { loadTransactions, saveReport, saveTransactions } from "@/lib/moneymirror-storage"
+import {
+  appendAnalysisToStoredWorkspace,
+  loadWorkspace,
+  saveWorkspace,
+} from "@/lib/moneymirror-storage"
 
 export default function UploadPage() {
   const [csvText, setCsvText] = useState(sampleCsv)
-  const [fileName, setFileName] = useState("sample-transactions.csv")
-  const [transactions, setTransactions] = useState<MoneyTransaction[]>([])
+  const [fileName, setFileName] = useState(sampleCsvStatements[0].fileName)
+  const [pendingFiles, setPendingFiles] = useState<File[]>([])
+  const [workspace, setWorkspace] = useState<MoneyWorkspace | null>(null)
   const [errors, setErrors] = useState<string[]>([])
-  const [status, setStatus] = useState("Sample data is ready.")
+  const [status, setStatus] = useState("Sample CSV is ready.")
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      const stored = loadTransactions()
-      if (stored.length > 0) {
-        setTransactions(stored)
-        setStatus(`${stored.length} saved transactions loaded.`)
+      const stored = loadWorkspace()
+      const storedTransactions = getWorkspaceTransactions(stored)
+      setWorkspace(stored)
+      if (storedTransactions.length > 0) {
+        setStatus(`${storedTransactions.length} saved transactions loaded from ${stored.statements.length} statement${stored.statements.length === 1 ? "" : "s"}.`)
       }
     }, 0)
 
     return () => window.clearTimeout(timer)
   }, [])
 
+  const transactions = useMemo(() => (workspace ? getWorkspaceTransactions(workspace) : []), [workspace])
   const metrics = useMemo(() => getMoneyMetrics(transactions), [transactions])
+  const monthlyMetrics = useMemo(() => getMonthlyMetrics(transactions), [transactions])
 
-  function parseCsv() {
-    const result = parseMoneyCsv(csvText)
-    setErrors(result.errors)
-    setTransactions(result.transactions)
+  function appendAnalysis(analysis: MoneyAnalysisResult | MoneyFilesAnalysisResult, sourceName: string) {
+    const currentWorkspace = workspace ?? loadWorkspace()
+    const next = appendAnalysisToStoredWorkspace(currentWorkspace, analysis)
+    const nextTransactions = getWorkspaceTransactions(next)
+    const statements = "statement" in analysis ? [analysis.statement] : analysis.statements
 
-    if (result.transactions.length > 0) {
-      saveTransactions(result.transactions)
-      saveReport(buildMoneyReport(result.transactions))
-      setStatus(
-        `${result.transactions.length} transactions normalized from ${fileName}.${
-          result.errors.length > 0
-            ? ` ${result.errors.length} rows need review. Run Analyze to categorize the saved rows.`
-            : " Run Analyze to categorize spending."
-        }`
-      )
-    } else {
-      setStatus("No transactions were saved.")
-    }
+    setWorkspace(next)
+    setErrors(analysis.errors)
+    setStatus(
+      `${statements.length} statement${statements.length === 1 ? "" : "s"} added from ${sourceName}. ${nextTransactions.length} total transactions are ready.`
+    )
   }
 
-  function analyzeTransactions() {
-    const analyzed = categorizeTransactions(transactions)
-    setTransactions(analyzed)
-    saveTransactions(analyzed)
-    saveReport(buildMoneyReport(analyzed))
-    setStatus(`${analyzed.length} transactions categorized and saved.`)
+  function analyzeCsv(text = csvText, sourceName = fileName) {
+    const result = analyzeMoneyCsv(text, sourceName)
+    appendAnalysis(result, sourceName)
+  }
+
+  function analyzeSample(mode: "single" | "multi") {
+    const result = analyzeSampleCsvs(mode)
+    setCsvText(mode === "single" ? sampleCsvStatements[0].csvText : sampleCsvStatements.map((sample) => sample.csvText).join("\n\n"))
+    setFileName(mode === "single" ? sampleCsvStatements[0].fileName : "two sample CSVs")
+    setPendingFiles([])
+    appendAnalysis(result, mode === "single" ? "single-month sample" : "multi-month sample")
+  }
+
+  async function analyzeSelectedCsvs() {
+    if (pendingFiles.length === 0) {
+      analyzeCsv()
+      return
+    }
+
+    const result = await analyzeMoneyCsvFiles(pendingFiles)
+    appendAnalysis(
+      result,
+      pendingFiles.length === 1 ? pendingFiles[0].name : `${pendingFiles.length} files`
+    )
+    setPendingFiles([])
   }
 
   function updateCategory(id: string, category: MoneyCategory) {
-    const next = transactions.map((transaction) => {
-      const type: MoneyTransaction["type"] =
-        category === "Income" ? "income" : category === "Transfers" ? "transfer" : "debit"
-
-      return transaction.id === id
-        ? {
-            ...transaction,
-            category,
-            confidence: 1,
-            reason: "Manually edited by user",
-            type,
-          }
-        : transaction
-    })
-
-    setTransactions(next)
-    saveTransactions(next)
+    if (!workspace) return
+    const next = updateWorkspaceTransactionCategory(workspace, id, category)
+    setWorkspace(next)
+    saveWorkspace(next)
     setStatus("Category edit saved.")
   }
 
   function removeTransaction(id: string) {
-    const next = transactions.filter((transaction) => transaction.id !== id)
-    setTransactions(next)
-    saveTransactions(next)
+    if (!workspace) return
+    const next = removeWorkspaceTransaction(workspace, id)
+    setWorkspace(next)
+    saveWorkspace(next)
     setStatus("Transaction removed.")
   }
 
   async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0]
-    if (!file) return
+    const files = Array.from(event.target.files ?? [])
+    if (files.length === 0) return
 
-    const text = await file.text()
-    setFileName(file.name)
-    setCsvText(text)
+    setPendingFiles(files)
+    setFileName(files.length === 1 ? files[0].name : `${files.length} CSV files`)
+    if (files.length === 1) setCsvText(await files[0].text())
     setErrors([])
-    setStatus(`${file.name} loaded. Parse it when ready.`)
+    setStatus(`${files.length} CSV file${files.length === 1 ? "" : "s"} selected.`)
   }
 
   return (
     <div className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6">
-      <div className="grid gap-6 lg:grid-cols-[0.85fr_1.15fr]">
+      <div className="grid gap-6 lg:grid-cols-[0.82fr_1.18fr]">
         <section className="space-y-4">
           <div>
             <p className="text-sm font-medium uppercase tracking-[0.18em] text-primary">Upload</p>
-            <h1 className="mt-2 text-3xl font-semibold tracking-normal">CSV transaction intake</h1>
+            <h1 className="mt-2 text-3xl font-semibold tracking-normal">CSV workspace</h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-              Normalize a statement into MoneyMirror transactions, then analyze categories and save the workspace locally.
+              Add one statement or many. Everything stays in this browser.
             </p>
           </div>
 
           <div className="rounded-lg border border-border bg-card p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h2 className="font-medium">Statement file</h2>
+                <h2 className="font-medium">Input</h2>
                 <p className="mt-1 text-sm text-muted-foreground">{status}</p>
               </div>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setCsvText(sampleCsv)
-                  setFileName("sample-transactions.csv")
-                  setErrors([])
-                  setStatus("Sample CSV loaded.")
-                }}
-              >
-                <RefreshCw className="size-4" />
-                Sample CSV
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="outline" onClick={() => analyzeSample("single")}>
+                  <RefreshCw className="size-4" />
+                  Single sample
+                </Button>
+                <Button type="button" variant="secondary" onClick={() => analyzeSample("multi")}>
+                  <Sparkles className="size-4" />
+                  Multi sample
+                </Button>
+              </div>
             </div>
+
             <div className="mt-4 grid gap-3">
-              <Input accept=".csv,text/csv" type="file" onChange={handleFileChange} />
+              <Input accept=".csv,text/csv" multiple type="file" onChange={handleFileChange} />
               <textarea
-                className="min-h-64 w-full resize-y rounded-lg border border-input bg-background p-3 text-sm leading-6 outline-none focus:border-ring focus:ring-3 focus:ring-ring/30"
+                className="min-h-64 w-full resize-y rounded-lg border border-input bg-background p-3 text-sm leading-6 text-foreground outline-none focus:border-ring focus:ring-3 focus:ring-ring/30"
                 value={csvText}
                 onChange={(event) => setCsvText(event.target.value)}
                 spellCheck={false}
               />
               <div className="flex flex-wrap gap-3">
-                <Button type="button" onClick={parseCsv}>
+                <Button type="button" onClick={analyzeSelectedCsvs} disabled={pendingFiles.length === 0 && csvText.trim().length === 0}>
                   <Upload className="size-4" />
-                  Parse CSV
-                </Button>
-                <Button type="button" variant="secondary" onClick={analyzeTransactions} disabled={transactions.length === 0}>
-                  <Sparkles className="size-4" />
-                  Analyze categories
+                  {pendingFiles.length > 1 ? "Analyze CSVs" : "Analyze CSV"}
                 </Button>
                 <Button asChild type="button" variant="outline">
                   <Link href="/dashboard">
@@ -173,6 +182,7 @@ export default function UploadPage() {
                 </Button>
               </div>
             </div>
+
             {errors.length > 0 ? (
               <div className="mt-4 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
                 {errors.map((error) => (
@@ -185,8 +195,23 @@ export default function UploadPage() {
           <div className="grid gap-3 sm:grid-cols-3">
             <Metric label="Income" value={formatCurrency(metrics.totalIncome)} />
             <Metric label="Expenses" value={formatCurrency(metrics.totalExpenses)} />
-            <Metric label="Net cashflow" value={formatCurrency(metrics.netCashflow)} />
+            <Metric label="Cashflow" value={formatCurrency(metrics.netCashflow)} />
           </div>
+
+          {transactions.length > 0 ? (
+            <div className="rounded-lg border border-border bg-card p-4">
+              <div className="grid gap-3 sm:grid-cols-3">
+                <Metric label="Statements" value={`${workspace?.statements.length ?? 0}`} muted />
+                <Metric label="Months" value={`${monthlyMetrics.length}`} muted />
+                <Metric label="Rows" value={`${transactions.length}`} muted />
+              </div>
+              {monthlyMetrics.length < 2 ? (
+                <p className="mt-4 rounded-lg border border-border bg-background p-3 text-sm text-muted-foreground">
+                  Add another month to unlock comparison charts and month-on-month notes.
+                </p>
+              ) : null}
+            </div>
+          ) : null}
         </section>
 
         <section className="rounded-lg border border-border bg-card">
@@ -194,32 +219,42 @@ export default function UploadPage() {
             <div>
               <h2 className="font-medium">Transactions</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                {transactions.length} normalized rows. Biggest category: {metrics.biggestCategory}.
+                {transactions.length} analyzed rows. Biggest category: {metrics.biggestCategory}.
               </p>
             </div>
-            <Button asChild variant="outline">
-              <Link href="/reports/current">
-                <FileText className="size-4" />
-                Report
-              </Link>
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button asChild variant="outline">
+                <Link href="/dashboard">
+                  <BarChart3 className="size-4" />
+                  Dashboard
+                </Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link href="/reports/current">
+                  <FileText className="size-4" />
+                  Report
+                </Link>
+              </Button>
+            </div>
           </div>
+
           {transactions.length === 0 ? (
             <div className="grid min-h-96 place-items-center p-6 text-center">
               <div>
                 <Sparkles className="mx-auto size-9 text-primary" />
                 <p className="mt-3 font-medium">No parsed transactions yet</p>
                 <p className="mt-1 max-w-sm text-sm leading-6 text-muted-foreground">
-                  Parse the sample CSV or upload a bank statement export.
+                  Start with a sample or upload bank statement CSVs.
                 </p>
               </div>
             </div>
           ) : (
-            <Table className="min-w-[860px]">
+            <Table className="min-w-[900px]">
               <TableHeader>
                 <TableRow>
                   <TableHead>Date</TableHead>
                   <TableHead>Description</TableHead>
+                  <TableHead>Merchant</TableHead>
                   <TableHead className="text-right">Amount</TableHead>
                   <TableHead>Category</TableHead>
                   <TableHead>Confidence</TableHead>
@@ -231,6 +266,7 @@ export default function UploadPage() {
                   <TableRow key={transaction.id}>
                     <TableCell>{transaction.date}</TableCell>
                     <TableCell className="max-w-52 whitespace-normal">{transaction.description}</TableCell>
+                    <TableCell className="max-w-44 whitespace-normal text-muted-foreground">{transaction.merchant}</TableCell>
                     <TableCell className={transaction.amount >= 0 ? "text-right text-primary" : "text-right"}>
                       {formatCurrency(transaction.amount)}
                     </TableCell>
@@ -270,11 +306,11 @@ export default function UploadPage() {
   )
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
+function Metric({ label, value, muted = false }: { label: string; value: string; muted?: boolean }) {
   return (
-    <div className="rounded-lg border border-border bg-card p-4">
+    <div className={muted ? "rounded-lg bg-background p-3" : "rounded-lg border border-border bg-card p-4"}>
       <p className="text-sm text-muted-foreground">{label}</p>
-      <p className="mt-2 text-2xl font-semibold">{value}</p>
+      <p className="mt-2 break-words text-2xl font-semibold">{value}</p>
     </div>
   )
 }

@@ -3,8 +3,18 @@
 import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import { ArrowRight, FileText, RefreshCw, Sparkles, Trash2, Upload } from "lucide-react"
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
 
+import { MonthlySuggestionsDialog } from "@/components/monthly-suggestions-dialog"
 import { Button } from "@/components/ui/button"
+import {
+  ChartContainer,
+  ChartLegend,
+  ChartLegendContent,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from "@/components/ui/chart"
 import {
   Table,
   TableBody,
@@ -14,46 +24,73 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import {
+  analyzeSampleCsvs,
   buildMoneyReport,
-  categorizeTransactions,
+  buildMonthlySuggestions,
+  createMoneyWorkspace,
+  formatCompactCurrency,
   formatCurrency,
+  getMonthlyMetrics,
   getMoneyMetrics,
-  parseMoneyCsv,
-  sampleCsv,
+  getWorkspaceTransactions,
   type MoneyTransaction,
+  type MoneyWorkspace,
 } from "@/lib/moneymirror"
 import {
   clearMoneyMirrorData,
-  loadTransactions,
-  saveReport,
-  saveTransactions,
+  appendAnalysisToStoredWorkspace,
+  loadWorkspace,
 } from "@/lib/moneymirror-storage"
 
+const monthlyChartConfig = {
+  totalIncome: {
+    label: "Income",
+    color: "var(--color-primary)",
+  },
+  totalExpenses: {
+    label: "Expenses",
+    color: "var(--color-expense)",
+  },
+  netCashflow: {
+    label: "Cashflow",
+    color: "var(--color-accent)",
+  },
+} satisfies ChartConfig
+
 export default function DashboardPage() {
-  const [transactions, setTransactions] = useState<MoneyTransaction[]>([])
+  const [workspace, setWorkspace] = useState<MoneyWorkspace | null>(null)
+  const transactions = useMemo(() => (workspace ? getWorkspaceTransactions(workspace) : []), [workspace])
   const metrics = useMemo(() => getMoneyMetrics(transactions), [transactions])
+  const report = useMemo(() => (transactions.length > 0 ? buildMoneyReport(transactions) : null), [transactions])
+  const monthlyMetrics = useMemo(() => getMonthlyMetrics(transactions), [transactions])
+  const latestMonth = monthlyMetrics.at(-1)
+  const previousMonth = monthlyMetrics.at(-2)
+  const monthlySuggestions = useMemo(
+    () => buildMonthlySuggestions(latestMonth, previousMonth),
+    [latestMonth, previousMonth]
+  )
+  const hasComparison = monthlyMetrics.length > 1
   const maxCategory = Math.max(...metrics.categoryTotals.map((item) => item.amount), 1)
   const maxFlow = Math.max(metrics.totalIncome, metrics.totalExpenses, 1)
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      setTransactions(loadTransactions())
+      setWorkspace(loadWorkspace())
     }, 0)
 
     return () => window.clearTimeout(timer)
   }, [])
 
   function loadSample() {
-    const parsed = parseMoneyCsv(sampleCsv)
-    const analyzed = categorizeTransactions(parsed.transactions)
-    setTransactions(analyzed)
-    saveTransactions(analyzed)
-    saveReport(buildMoneyReport(analyzed))
+    const analysis = analyzeSampleCsvs("multi")
+    const current = workspace ?? loadWorkspace()
+    const next = appendAnalysisToStoredWorkspace(current, analysis)
+    setWorkspace(next)
   }
 
   function clearData() {
     clearMoneyMirrorData()
-    setTransactions([])
+    setWorkspace(createMoneyWorkspace())
   }
 
   return (
@@ -64,7 +101,7 @@ export default function DashboardPage() {
           <h1 className="mt-2 text-3xl font-semibold tracking-normal">Money overview</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
             {transactions.length > 0
-              ? `${transactions.length} transactions analyzed from the current workspace.`
+              ? `${transactions.length} transactions across ${monthlyMetrics.length} month${monthlyMetrics.length === 1 ? "" : "s"}.`
               : "Upload a CSV or load the sample workspace."}
           </p>
         </div>
@@ -114,6 +151,66 @@ export default function DashboardPage() {
             <Metric label="Net cashflow" value={formatCurrency(metrics.netCashflow)} tone="gold" />
             <Metric label="Biggest category" value={metrics.biggestCategory} detail={formatCurrency(metrics.biggestCategoryAmount)} />
             <Metric label="Top money leak" value={metrics.topMoneyLeak} detail={formatCurrency(metrics.topMoneyLeakAmount)} />
+          </section>
+
+          <section className="mt-6 rounded-lg border border-border bg-card p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="font-medium">Monthly comparison</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {hasComparison
+                    ? "Income, expenses, and cashflow grouped by transaction month."
+                    : "Upload another month to compare spending patterns."}
+                </p>
+              </div>
+              <MonthlySuggestionsDialog
+                monthLabel={latestMonth?.monthLabel}
+                suggestions={monthlySuggestions}
+              />
+            </div>
+            {hasComparison ? (
+              <ChartContainer config={monthlyChartConfig} className="mt-5 h-80 w-full">
+                <BarChart data={monthlyMetrics} accessibilityLayer>
+                  <CartesianGrid vertical={false} />
+                  <XAxis
+                    dataKey="monthLabel"
+                    tickLine={false}
+                    tickMargin={10}
+                    axisLine={false}
+                  />
+                  <YAxis
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={10}
+                    tickFormatter={(value) => formatCompactCurrency(Number(value))}
+                  />
+                  <ChartTooltip
+                    content={
+                      <ChartTooltipContent
+                        formatter={(value, name) => (
+                          <div className="flex min-w-36 items-center justify-between gap-4">
+                            <span className="text-muted-foreground">
+                              {monthlyChartConfig[name as keyof typeof monthlyChartConfig]?.label ?? name}
+                            </span>
+                            <span className="font-medium text-foreground">
+                              {formatCurrency(Number(value))}
+                            </span>
+                          </div>
+                        )}
+                      />
+                    }
+                  />
+                  <ChartLegend content={<ChartLegendContent />} />
+                  <Bar dataKey="totalIncome" fill="var(--color-totalIncome)" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="totalExpenses" fill="var(--color-totalExpenses)" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="netCashflow" fill="var(--color-netCashflow)" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ChartContainer>
+            ) : (
+              <div className="mt-5 rounded-lg border border-dashed border-border bg-background p-6 text-sm text-muted-foreground">
+                Current workspace has one month. Add one more CSV month to unlock the bar chart and category movement notes.
+              </div>
+            )}
           </section>
 
           <section className="mt-6 grid gap-6 lg:grid-cols-[1fr_0.85fr]">
@@ -169,6 +266,30 @@ export default function DashboardPage() {
               </div>
             </div>
           </section>
+
+          {report ? (
+            <section className="mt-6 rounded-lg border border-border bg-card p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="font-medium">What to cut first</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">Practical recommendations from the current workspace.</p>
+                </div>
+                <Button asChild variant="outline">
+                  <Link href="/reports/current">
+                    Full report
+                    <ArrowRight className="size-4" />
+                  </Link>
+                </Button>
+              </div>
+              <div className="mt-4 grid gap-3 md:grid-cols-3">
+                {report.suggestions.map((suggestion) => (
+                  <p key={suggestion} className="rounded-lg bg-muted p-3 text-sm leading-6">
+                    {suggestion}
+                  </p>
+                ))}
+              </div>
+            </section>
+          ) : null}
 
           <section className="mt-6 grid gap-6 lg:grid-cols-2">
             <TransactionTable title="Recent transactions" transactions={metrics.recentTransactions} />

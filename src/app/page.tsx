@@ -6,17 +6,17 @@ import { Button } from "@/components/ui/button"
 const flow = [
   {
     title: "Upload",
-    detail: "Drop in a CSV statement and normalize dates, descriptions, amounts, and transaction types.",
+    detail: "Drop in one CSV or several monthly statements.",
     icon: Upload,
   },
   {
     title: "Analyze",
-    detail: "Categorize spending with a structured finance classifier and editable confidence scores.",
+    detail: "Categorize spending locally with editable categories.",
     icon: Sparkles,
   },
   {
     title: "Understand",
-    detail: "Review income, expenses, cashflow, category spend, repeated charges, and money leaks.",
+    detail: "Review income, expenses, cashflow, categories, and month-on-month movement.",
     icon: BarChart3,
   },
 ]
@@ -26,19 +26,19 @@ export default function HomePage() {
     <section className="mx-auto grid min-h-[calc(100vh-4rem)] w-full max-w-7xl items-center gap-10 px-4 py-10 sm:px-6 lg:grid-cols-[0.9fr_1.1fr]">
       <div className="space-y-7">
         <div className="space-y-4">
-          <p className="text-sm font-medium uppercase tracking-[0.22em] text-primary">AI finance tracker MVP</p>
+          <p className="text-sm font-medium uppercase tracking-[0.22em] text-primary">Local finance tracker MVP</p>
           <h1 className="max-w-3xl text-5xl font-semibold leading-[1.02] tracking-normal text-foreground sm:text-6xl">
             MoneyMirror
           </h1>
           <p className="max-w-2xl text-lg leading-8 text-muted-foreground">
-            Upload a transaction file and get a clean read on income, expenses, categories, and where money is quietly leaking.
+            Upload one or more CSV statements and get clean monthly charts, category tables, and practical spending suggestions.
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
           <Button asChild size="lg">
             <Link href="/upload">
               <Upload className="size-4" />
-              Start with CSV
+              Analyze CSVs
             </Link>
           </Button>
           <Button asChild size="lg" variant="outline">
@@ -81,7 +81,7 @@ export default function HomePage() {
         <Link className="flex items-center justify-between rounded-lg border border-border bg-background p-4 text-sm font-medium hover:bg-muted" href="/reports/current">
           <span className="flex items-center gap-2">
             <FileText className="size-4 text-primary" />
-            View AI money summary
+            View money report
           </span>
           <ArrowRight className="size-4" />
         </Link>

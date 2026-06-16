@@ -6,7 +6,7 @@ import "./globals.css"
 
 export const metadata: Metadata = {
   title: "MoneyMirror",
-  description: "AI finance tracker MVP for CSV transaction analysis.",
+  description: "Local-first finance tracker MVP for CSV transaction analysis.",
 }
 
 export default function RootLayout({
@@ -15,7 +15,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" className="dark">
       <body>
         <header className="border-b border-border/80 bg-card/80 backdrop-blur">
           <div className="mx-auto flex min-h-16 w-full max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
@@ -40,7 +40,7 @@ export default function RootLayout({
               </Link>
               <span className="flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-2 text-foreground">
                 <ShieldCheck className="size-4 text-primary" />
-                Demo user
+                Local only
               </span>
             </nav>
           </div>

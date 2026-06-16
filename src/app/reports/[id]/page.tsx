@@ -4,43 +4,56 @@ import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import { BarChart3, FileText, RefreshCw, Upload } from "lucide-react"
 
+import { MonthlySuggestionsDialog } from "@/components/monthly-suggestions-dialog"
 import { Button } from "@/components/ui/button"
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import {
+  analyzeSampleCsvs,
   buildMoneyReport,
-  categorizeTransactions,
+  buildMonthlySuggestions,
   formatCurrency,
+  getMonthlyMetrics,
   getMoneyMetrics,
-  parseMoneyCsv,
-  sampleCsv,
+  getWorkspaceTransactions,
   type MoneyReport,
-  type MoneyTransaction,
+  type MoneyWorkspace,
 } from "@/lib/moneymirror"
-import { loadReport, loadTransactions, saveReport, saveTransactions } from "@/lib/moneymirror-storage"
+import { appendAnalysisToStoredWorkspace, loadWorkspace } from "@/lib/moneymirror-storage"
 
 export default function ReportPage() {
-  const [transactions, setTransactions] = useState<MoneyTransaction[]>([])
-  const [report, setReport] = useState<MoneyReport | null>(null)
+  const [workspace, setWorkspace] = useState<MoneyWorkspace | null>(null)
+  const transactions = useMemo(() => (workspace ? getWorkspaceTransactions(workspace) : []), [workspace])
+  const report = useMemo<MoneyReport | null>(() => (transactions.length > 0 ? buildMoneyReport(transactions) : null), [transactions])
   const metrics = useMemo(() => getMoneyMetrics(transactions), [transactions])
+  const monthlyMetrics = useMemo(() => getMonthlyMetrics(transactions), [transactions])
+  const latestMonth = monthlyMetrics.at(-1)
+  const previousMonth = monthlyMetrics.at(-2)
+  const monthlySuggestions = useMemo(
+    () => buildMonthlySuggestions(latestMonth, previousMonth),
+    [latestMonth, previousMonth]
+  )
+  const hasComparison = monthlyMetrics.length > 1
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      const storedTransactions = loadTransactions()
-      const storedReport = loadReport()
-      setTransactions(storedTransactions)
-      setReport(storedReport ?? (storedTransactions.length > 0 ? buildMoneyReport(storedTransactions) : null))
+      setWorkspace(loadWorkspace())
     }, 0)
 
     return () => window.clearTimeout(timer)
   }, [])
 
   function loadSampleReport() {
-    const parsed = parseMoneyCsv(sampleCsv)
-    const analyzed = categorizeTransactions(parsed.transactions)
-    const nextReport = buildMoneyReport(analyzed)
-    setTransactions(analyzed)
-    setReport(nextReport)
-    saveTransactions(analyzed)
-    saveReport(nextReport)
+    const analysis = analyzeSampleCsvs("multi")
+    const current = workspace ?? loadWorkspace()
+    const next = appendAnalysisToStoredWorkspace(current, analysis)
+    setWorkspace(next)
   }
 
   return (
@@ -50,7 +63,7 @@ export default function ReportPage() {
           <p className="text-sm font-medium uppercase tracking-[0.18em] text-primary">Report</p>
           <h1 className="mt-2 text-3xl font-semibold tracking-normal">Current money summary</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-            A concise finance readout based on the categorized workspace.
+            A concise finance readout based on the categorized local workspace.
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
@@ -147,6 +160,54 @@ export default function ReportPage() {
                 )}
               </div>
             </div>
+          </section>
+
+          <section className="rounded-lg border border-border bg-card lg:col-span-2">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border p-4">
+              <div>
+                <h2 className="font-medium">Monthly report table</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  One row per calendar month across all uploaded CSV statements.
+                </p>
+              </div>
+              <MonthlySuggestionsDialog
+                monthLabel={latestMonth?.monthLabel}
+                suggestions={monthlySuggestions}
+              />
+            </div>
+            <Table className="min-w-[860px]">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Month</TableHead>
+                  <TableHead className="text-right">Income</TableHead>
+                  <TableHead className="text-right">Expenses</TableHead>
+                  <TableHead className="text-right">Cashflow</TableHead>
+                  <TableHead>Biggest category</TableHead>
+                  <TableHead>Top leak</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {monthlyMetrics.map((month) => (
+                  <TableRow key={month.month}>
+                    <TableCell className="font-medium">{month.monthLabel}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(month.totalIncome)}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(month.totalExpenses)}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(month.netCashflow)}</TableCell>
+                    <TableCell>
+                      {month.biggestCategory} ({formatCurrency(month.biggestCategoryAmount)})
+                    </TableCell>
+                    <TableCell>
+                      {month.topMoneyLeak} ({formatCurrency(month.topMoneyLeakAmount)})
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            {!hasComparison ? (
+              <div className="border-t border-border p-4 text-sm text-muted-foreground">
+                Add another month of CSV data to compare categories, warnings, and appreciation notes.
+              </div>
+            ) : null}
           </section>
         </div>
       )}

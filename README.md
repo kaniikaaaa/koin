@@ -1,29 +1,46 @@
-# MoneyMirror MVP
+# MoneyMirror V1
 
-MoneyMirror is a hackathon-ready finance tracker MVP. It lets a user upload a CSV statement, normalizes transactions, categorizes spending, and renders a dashboard plus a short money summary.
+MoneyMirror is a local-first finance tracker MVP. It lets a user bring one or more CSV statements, analyze transactions in the browser, and immediately review spending metrics, monthly charts, report tables, and practical suggestions.
 
-## Current MVP Flow
+## Current V1 Flow
 
 1. Open the app at `/`.
 2. Go to `/upload`.
-3. Upload a CSV or use the sample CSV.
-4. Parse and analyze transactions.
+3. Upload one or more CSV files, paste CSV text, or use the sample CSV.
+4. Click `Analyze CSV` or `Analyze CSVs`.
 5. Review `/dashboard` and `/reports/current`.
 
-The local demo persists the active workspace in browser storage so it can run without a live database or external AI key. API routes and the Prisma schema are included for the Postgres-backed path.
+V1 stores the active multi-statement workspace only in browser `localStorage`. New CSV uploads append to the existing workspace. There is no login, database, bank connection, server-side statement storage, or AI service requirement.
 
 ## Features
 
 - CSV upload and paste-in parsing
+- Multiple CSV uploads in one local workspace
+- Single-month and multi-month sample workspaces
 - Normalized transaction shape
-- Rule-based structured categorization fallback
+- Local rule-based categorization
 - Editable categories
 - Dashboard cards for income, expenses, net cashflow, biggest category, and money leak
-- Category and cashflow charts using native UI
+- Monthly comparison chart using shadcn chart/Recharts
+- Monthly report table
+- Suggestion popup with shadcn dialog and carousel
 - Recent and biggest transaction tables
-- Generated money summary with suggestions
-- API routes for upload, analysis, and reports
-- Prisma schema for users, uploads, transactions, and reports
+- Local money summary with practical suggestions
+- Browser storage persistence
+- Delete workspace action
+
+## Local Architecture
+
+The app keeps a small client-side service stack under `lib/`:
+
+- `money-csv.ts` parses CSV rows into normalized transaction drafts.
+- `money-categorizer.ts` applies local category rules.
+- `money-workspace.ts` owns the normalized workspace model, edits, deletes, and migration.
+- `money-metrics.ts` aggregates totals and calendar-month metrics.
+- `money-insights.ts` builds report text, savings ideas, investment prompts, warnings, and appreciation notes.
+- `moneymirror-storage.ts` persists the workspace and legacy compatibility data in `localStorage`.
+
+The UI imports through `lib/moneymirror.ts`, which is only a barrel export. No page calls an API route for upload, analysis, dashboard, or report generation.
 
 ## Scripts
 
@@ -36,16 +53,15 @@ npm test
 
 `npm test` runs lint and a production build.
 
-## Database
+## Privacy Model
 
-The schema lives in `prisma/schema.prisma`.
+- No login.
+- No database.
+- No bank connection.
+- No server-side statement storage.
+- No raw transaction data sent to analytics.
+- `Delete workspace` clears browser storage.
 
-```bash
-npx prisma validate
-```
+## Later
 
-Add a real `DATABASE_URL` in `.env` before running migrations against Postgres.
-
-## Notes
-
-Clerk/OpenAI can be connected later with real keys. The current version is intentionally demo-safe: it proves the core MoneyMirror experience without requiring external services during local testing.
+PDF parsing, screenshot/OCR upload, optional AI summary, auth, database, and cross-device history are intentionally outside V1.
