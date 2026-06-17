@@ -163,6 +163,33 @@ export default function DashboardPage() {
   const hasComparison = monthlyMetrics.length > 1
   const maxCategory = Math.max(...filteredCategoryTotals.map((item) => item.amount), 1)
   const maxFlow = Math.max(metrics.totalIncome, metrics.totalExpenses, 1)
+  const chatContext = useMemo(() => {
+    if (transactions.length === 0) return undefined
+
+    const lines = [
+      `Transactions: ${transactions.length} across ${monthlyMetrics.length} month(s).`,
+      `Total income: ${formatCurrency(metrics.totalIncome)}.`,
+      `Total expenses: ${formatCurrency(metrics.totalExpenses)}.`,
+      `Net cashflow: ${formatCurrency(metrics.netCashflow)}.`,
+      `Biggest category: ${metrics.biggestCategory} (${formatCurrency(metrics.biggestCategoryAmount)}).`,
+      `Top money leak: ${metrics.topMoneyLeak} (${formatCurrency(metrics.topMoneyLeakAmount)}).`,
+    ]
+
+    if (metrics.categoryTotals.length > 0) {
+      lines.push("Spending by category:")
+      for (const item of metrics.categoryTotals.slice(0, 8)) {
+        lines.push(`- ${item.category}: ${formatCurrency(item.amount)}`)
+      }
+    }
+
+    for (const month of monthlyMetrics) {
+      lines.push(
+        `Month ${month.monthLabel}: income ${formatCurrency(month.totalIncome)}, expenses ${formatCurrency(month.totalExpenses)}, cashflow ${formatCurrency(month.netCashflow)}.`
+      )
+    }
+
+    return lines.join("\n")
+  }, [metrics, monthlyMetrics, transactions])
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -458,7 +485,7 @@ export default function DashboardPage() {
             <TransactionTable title="Biggest transactions" transactions={metrics.biggestTransactions} />
           </section>
 
-          <ChatPanel />
+          <ChatPanel context={chatContext} />
       </>
     </div>
   )

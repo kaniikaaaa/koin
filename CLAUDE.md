@@ -86,9 +86,17 @@ route. Modules:
 - Client components that touch `localStorage` load it inside a `useEffect`
   (avoids SSR/hydration mismatch).
 
-## Chat assistant (future LLM)
+## Chat assistant (OpenAI)
 
-The chat panel is fully wired but offline. The **only** integration point is
-`getAssistantReply(messages)` in `lib/chat.ts`, which currently returns a fixed
-placeholder. To connect a model later, replace that function's body (e.g. POST
-the messages to a new API route) — the UI needs no changes.
+The dashboard chat panel is wired to OpenAI **GPT-4o-mini**:
+
+- `components/chat-panel.tsx` — UI; receives a `context` prop (a plain-text
+  finance summary built on the dashboard from metrics + monthly data).
+- `lib/chat.ts::getAssistantReply(messages, context)` — POSTs to `/api/chat`.
+- `src/app/api/chat/route.ts` — server-side handler. Reads `OPENAI_API_KEY`
+  (and optional `OPENAI_CHAT_MODEL`, default `gpt-4o-mini`) from the env, injects
+  the finance summary into the system prompt, calls OpenAI's chat completions
+  API, and returns `{ reply }`. The key never reaches the browser.
+
+Set `OPENAI_API_KEY` in `.env` and restart the dev server. Without it, the route
+returns a clear error that the chat panel shows as a message bubble.

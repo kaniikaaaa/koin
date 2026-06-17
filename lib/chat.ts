@@ -19,13 +19,37 @@ export function createChatMessage(role: ChatRole, content: string): ChatMessage 
 }
 
 /**
- * Returns the assistant's reply for the current conversation.
+ * Send the conversation to the server-side chat route (which calls OpenAI with
+ * the key from the environment) and return the assistant's reply.
  *
- * TODO: connect to an LLM. This is intentionally the single integration point —
- * the chat UI is already fully wired, so wiring up a real model later only means
- * replacing the body of this function (e.g. POST the messages to an API route).
+ * `context` is a plain-text summary of the user's finances; it's injected into
+ * the system prompt so answers are grounded in the uploaded data.
+ *
+ * Throws with a human-readable message on failure so the UI can surface it.
  */
-export async function getAssistantReply(messages: ChatMessage[]): Promise<string> {
-  void messages
-  return "AI insights are coming soon — this assistant isn't connected to a model yet. Your message was received."
+export async function getAssistantReply(
+  messages: ChatMessage[],
+  context?: string
+): Promise<string> {
+  const response = await fetch("/api/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      context,
+      messages: messages.map((message) => ({
+        role: message.role,
+        content: message.content,
+      })),
+    }),
+  })
+
+  const data = (await response.json().catch(() => null)) as
+    | { reply?: string; error?: string }
+    | null
+
+  if (!response.ok || !data?.reply) {
+    throw new Error(data?.error ?? "The assistant is unavailable right now.")
+  }
+
+  return data.reply
 }
