@@ -63,7 +63,7 @@ export default function ReportPage() {
           <p className="text-sm font-medium uppercase tracking-[0.18em] text-primary">Report</p>
           <h1 className="mt-2 text-3xl font-semibold tracking-normal">Current money summary</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-            A concise finance readout based on the categorized local workspace.
+            A concise finance readout based on the categorized local data.
           </p>
         </div>
         <div className="flex flex-wrap gap-3">

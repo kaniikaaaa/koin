@@ -1,8 +1,9 @@
 "use client"
 
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"
-import { ArrowRight, FileText, RefreshCw, Sparkles, Trash2, Upload } from "lucide-react"
+import { ArrowRight, Check, FileText, RefreshCw, Upload } from "lucide-react"
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
 
 import { MonthlySuggestionsDialog } from "@/components/monthly-suggestions-dialog"
@@ -27,17 +28,17 @@ import {
   analyzeSampleCsvs,
   buildMoneyReport,
   buildMonthlySuggestions,
-  createMoneyWorkspace,
   formatCompactCurrency,
   formatCurrency,
   getMonthlyMetrics,
   getMoneyMetrics,
   getWorkspaceTransactions,
+  moneyCategories,
+  type MoneyCategory,
   type MoneyTransaction,
   type MoneyWorkspace,
 } from "@/lib/moneymirror"
 import {
-  clearMoneyMirrorData,
   appendAnalysisToStoredWorkspace,
   loadWorkspace,
 } from "@/lib/moneymirror-storage"
@@ -57,12 +58,98 @@ const monthlyChartConfig = {
   },
 } satisfies ChartConfig
 
+const categoryChartColors = [
+  "#2dd4bf",
+  "#b79a55",
+  "#7f3f43",
+  "#8fb3a6",
+  "#7d8aa3",
+  "#c0a46d",
+  "#6c9088",
+  "#9b6b72",
+  "#6f7b65",
+  "#8d7faa",
+  "#a8754f",
+]
+
+const expenseFilterCategories = moneyCategories.filter((category) => category !== "Income")
+
 export default function DashboardPage() {
+  const router = useRouter()
   const [workspace, setWorkspace] = useState<MoneyWorkspace | null>(null)
+  const [isLoaded, setIsLoaded] = useState(false)
+  const [selectedCategories, setSelectedCategories] = useState<MoneyCategory[]>([])
   const transactions = useMemo(() => (workspace ? getWorkspaceTransactions(workspace) : []), [workspace])
   const metrics = useMemo(() => getMoneyMetrics(transactions), [transactions])
   const report = useMemo(() => (transactions.length > 0 ? buildMoneyReport(transactions) : null), [transactions])
   const monthlyMetrics = useMemo(() => getMonthlyMetrics(transactions), [transactions])
+  const hasCategoryFilter = selectedCategories.length > 0
+  const selectedChartKeys = useMemo(() => selectedCategories.map(getCategoryChartKey), [selectedCategories])
+  const activeChartConfig = useMemo<ChartConfig>(() => {
+    if (!hasCategoryFilter) return monthlyChartConfig
+
+    return Object.fromEntries(
+      selectedCategories.map((category, index) => [
+        getCategoryChartKey(category),
+        {
+          label: category,
+          color: categoryChartColors[index % categoryChartColors.length],
+        },
+      ])
+    )
+  }, [hasCategoryFilter, selectedCategories])
+  const monthlyChartData = useMemo<Array<Record<string, number | string>>>(() => {
+    if (!hasCategoryFilter) {
+      return monthlyMetrics.map((month) => ({
+        month: month.month,
+        monthLabel: month.monthLabel,
+        totalIncome: month.totalIncome,
+        totalExpenses: month.totalExpenses,
+        netCashflow: month.netCashflow,
+      }))
+    }
+
+    return monthlyMetrics.map((month) => {
+      const row: Record<string, number | string> = {
+        month: month.month,
+        monthLabel: month.monthLabel,
+      }
+
+      for (const category of selectedCategories) {
+        row[getCategoryChartKey(category)] = sumCategorySpend(transactions, month.month, category)
+      }
+
+      return row
+    })
+  }, [hasCategoryFilter, monthlyMetrics, selectedCategories, transactions])
+  const filteredExpenseTransactions = useMemo(
+    () =>
+      transactions.filter((transaction) => {
+        if (transaction.amount >= 0) return false
+        if (!hasCategoryFilter) return transaction.category !== "Transfers"
+        return selectedCategories.includes(transaction.category)
+      }),
+    [hasCategoryFilter, selectedCategories, transactions]
+  )
+  const filteredExpenseTotal = useMemo(
+    () => filteredExpenseTransactions.reduce((total, transaction) => total + Math.abs(transaction.amount), 0),
+    [filteredExpenseTransactions]
+  )
+  const filteredCategoryTotals = useMemo(
+    () =>
+      hasCategoryFilter
+        ? selectedCategories
+            .map((category) => ({
+              category,
+              amount: filteredExpenseTransactions
+                .filter((transaction) => transaction.category === category)
+                .reduce((total, transaction) => total + Math.abs(transaction.amount), 0),
+            }))
+            .filter((item) => item.amount > 0)
+            .sort((a, b) => b.amount - a.amount)
+        : metrics.categoryTotals,
+    [filteredExpenseTransactions, hasCategoryFilter, metrics.categoryTotals, selectedCategories]
+  )
   const latestMonth = monthlyMetrics.at(-1)
   const previousMonth = monthlyMetrics.at(-2)
   const monthlySuggestions = useMemo(
@@ -70,16 +157,22 @@ export default function DashboardPage() {
     [latestMonth, previousMonth]
   )
   const hasComparison = monthlyMetrics.length > 1
-  const maxCategory = Math.max(...metrics.categoryTotals.map((item) => item.amount), 1)
+  const maxCategory = Math.max(...filteredCategoryTotals.map((item) => item.amount), 1)
   const maxFlow = Math.max(metrics.totalIncome, metrics.totalExpenses, 1)
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      setWorkspace(loadWorkspace())
+      const stored = loadWorkspace()
+      setWorkspace(stored)
+      setIsLoaded(true)
+
+      if (getWorkspaceTransactions(stored).length === 0) {
+        router.replace("/upload")
+      }
     }, 0)
 
     return () => window.clearTimeout(timer)
-  }, [])
+  }, [router])
 
   function loadSample() {
     const analysis = analyzeSampleCsvs("multi")
@@ -88,9 +181,16 @@ export default function DashboardPage() {
     setWorkspace(next)
   }
 
-  function clearData() {
-    clearMoneyMirrorData()
-    setWorkspace(createMoneyWorkspace())
+  function toggleCategory(category: MoneyCategory) {
+    setSelectedCategories((current) =>
+      current.includes(category)
+        ? current.filter((item) => item !== category)
+        : [...current, category]
+    )
+  }
+
+  if (!isLoaded || transactions.length === 0) {
+    return null
   }
 
   return (
@@ -102,7 +202,7 @@ export default function DashboardPage() {
           <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
             {transactions.length > 0
               ? `${transactions.length} transactions across ${monthlyMetrics.length} month${monthlyMetrics.length === 1 ? "" : "s"}.`
-              : "Upload a CSV or load the sample workspace."}
+              : "Upload a CSV or load sample data."}
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
@@ -125,26 +225,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {transactions.length === 0 ? (
-        <section className="mt-8 grid min-h-96 place-items-center rounded-lg border border-border bg-card p-8 text-center">
-          <div>
-            <Sparkles className="mx-auto size-10 text-primary" />
-            <h2 className="mt-4 text-xl font-semibold">No money data yet</h2>
-            <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
-              Start from the upload page, or load the sample set to view the demo dashboard.
-            </p>
-            <div className="mt-5 flex justify-center gap-3">
-              <Button asChild>
-                <Link href="/upload">Upload CSV</Link>
-              </Button>
-              <Button type="button" variant="outline" onClick={loadSample}>
-                Load sample
-              </Button>
-            </div>
-          </div>
-        </section>
-      ) : (
-        <>
+      <>
           <section className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             <Metric label="Total income" value={formatCurrency(metrics.totalIncome)} tone="green" />
             <Metric label="Total expenses" value={formatCurrency(metrics.totalExpenses)} tone="dark" />
@@ -159,7 +240,9 @@ export default function DashboardPage() {
                 <h2 className="font-medium">Monthly comparison</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
                   {hasComparison
-                    ? "Income, expenses, and cashflow grouped by transaction month."
+                    ? hasCategoryFilter
+                      ? `Showing ${selectedCategories.join(", ")} expenses by month.`
+                      : "Income, expenses, and cashflow grouped by transaction month."
                     : "Upload another month to compare spending patterns."}
                 </p>
               </div>
@@ -168,9 +251,58 @@ export default function DashboardPage() {
                 suggestions={monthlySuggestions}
               />
             </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant={hasCategoryFilter ? "outline" : "secondary"}
+                onClick={() => setSelectedCategories([])}
+              >
+                {!hasCategoryFilter ? <Check className="size-4" /> : null}
+                All expenses
+              </Button>
+              {expenseFilterCategories.map((category) => {
+                const checked = selectedCategories.includes(category)
+
+                return (
+                  <label
+                    key={category}
+                    className={`inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border px-2.5 text-sm font-medium transition-colors ${
+                      checked
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
+                    }`}
+                  >
+                    <input
+                      checked={checked}
+                      className="sr-only"
+                      type="checkbox"
+                      onChange={() => toggleCategory(category)}
+                    />
+                    {checked ? <Check className="size-4" /> : null}
+                    {category}
+                  </label>
+                )
+              })}
+            </div>
+            {hasCategoryFilter ? (
+              <div className="mt-3 grid gap-3 text-sm sm:grid-cols-3">
+                <div className="rounded-lg border border-border bg-background p-3">
+                  <p className="text-muted-foreground">Filtered spend</p>
+                  <p className="mt-1 font-semibold">{formatCurrency(filteredExpenseTotal)}</p>
+                </div>
+                <div className="rounded-lg border border-border bg-background p-3">
+                  <p className="text-muted-foreground">Transactions</p>
+                  <p className="mt-1 font-semibold">{filteredExpenseTransactions.length}</p>
+                </div>
+                <div className="rounded-lg border border-border bg-background p-3">
+                  <p className="text-muted-foreground">Selected</p>
+                  <p className="mt-1 truncate font-semibold">{selectedCategories.join(", ")}</p>
+                </div>
+              </div>
+            ) : null}
             {hasComparison ? (
-              <ChartContainer config={monthlyChartConfig} className="mt-5 h-80 w-full">
-                <BarChart data={monthlyMetrics} accessibilityLayer>
+              <ChartContainer config={activeChartConfig} className="mt-5 h-80 w-full">
+                <BarChart data={monthlyChartData} accessibilityLayer>
                   <CartesianGrid vertical={false} />
                   <XAxis
                     dataKey="monthLabel"
@@ -190,7 +322,7 @@ export default function DashboardPage() {
                         formatter={(value, name) => (
                           <div className="flex min-w-36 items-center justify-between gap-4">
                             <span className="text-muted-foreground">
-                              {monthlyChartConfig[name as keyof typeof monthlyChartConfig]?.label ?? name}
+                              {activeChartConfig[String(name)]?.label ?? name}
                             </span>
                             <span className="font-medium text-foreground">
                               {formatCurrency(Number(value))}
@@ -201,14 +333,22 @@ export default function DashboardPage() {
                     }
                   />
                   <ChartLegend content={<ChartLegendContent />} />
-                  <Bar dataKey="totalIncome" fill="var(--color-totalIncome)" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="totalExpenses" fill="var(--color-totalExpenses)" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="netCashflow" fill="var(--color-netCashflow)" radius={[4, 4, 0, 0]} />
+                  {hasCategoryFilter ? (
+                    selectedChartKeys.map((key) => (
+                      <Bar key={key} dataKey={key} fill={`var(--color-${key})`} radius={[4, 4, 0, 0]} />
+                    ))
+                  ) : (
+                    <>
+                      <Bar dataKey="totalIncome" fill="var(--color-totalIncome)" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="totalExpenses" fill="var(--color-totalExpenses)" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="netCashflow" fill="var(--color-netCashflow)" radius={[4, 4, 0, 0]} />
+                    </>
+                  )}
                 </BarChart>
               </ChartContainer>
             ) : (
               <div className="mt-5 rounded-lg border border-dashed border-border bg-background p-6 text-sm text-muted-foreground">
-                Current workspace has one month. Add one more CSV month to unlock the bar chart and category movement notes.
+                Current data has one month. Add one more CSV month to unlock the bar chart and category movement notes.
               </div>
             )}
           </section>
@@ -228,12 +368,12 @@ export default function DashboardPage() {
                 </Button>
               </div>
               <div className="mt-5 space-y-3">
-                {metrics.categoryTotals.length === 0 ? (
+                {filteredCategoryTotals.length === 0 ? (
                   <p className="rounded-lg bg-muted p-3 text-sm text-muted-foreground">
-                    Analyze debit transactions to populate category spend.
+                    No matching category spend for the current filter.
                   </p>
                 ) : (
-                  metrics.categoryTotals.slice(0, 8).map((item) => (
+                  filteredCategoryTotals.slice(0, 8).map((item) => (
                     <div key={item.category} className="grid gap-2">
                       <div className="flex items-center justify-between gap-3 text-sm">
                         <span className="font-medium">{item.category}</span>
@@ -253,7 +393,7 @@ export default function DashboardPage() {
 
             <div className="rounded-lg border border-border bg-card p-4">
               <h2 className="font-medium">Income vs expenses</h2>
-              <p className="mt-1 text-sm text-muted-foreground">Current CSV workspace.</p>
+              <p className="mt-1 text-sm text-muted-foreground">Current CSV data.</p>
               <div className="mt-6 space-y-5">
                 <FlowBar label="Income" amount={metrics.totalIncome} max={maxFlow} className="bg-primary" />
                 <FlowBar label="Expenses" amount={metrics.totalExpenses} max={maxFlow} className="bg-expense" />
@@ -272,7 +412,7 @@ export default function DashboardPage() {
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <h2 className="font-medium">What to cut first</h2>
-                  <p className="mt-1 text-sm text-muted-foreground">Practical recommendations from the current workspace.</p>
+                  <p className="mt-1 text-sm text-muted-foreground">Practical recommendations from the current data.</p>
                 </div>
                 <Button asChild variant="outline">
                   <Link href="/reports/current">
@@ -295,15 +435,7 @@ export default function DashboardPage() {
             <TransactionTable title="Recent transactions" transactions={metrics.recentTransactions} />
             <TransactionTable title="Biggest transactions" transactions={metrics.biggestTransactions} />
           </section>
-
-          <div className="mt-6 flex justify-end">
-            <Button type="button" variant="destructive" onClick={clearData}>
-              <Trash2 className="size-4" />
-              Delete workspace
-            </Button>
-          </div>
-        </>
-      )}
+      </>
     </div>
   )
 }
@@ -335,6 +467,16 @@ function Metric({
       {detail ? <p className="mt-2 text-sm opacity-75">{detail}</p> : null}
     </div>
   )
+}
+
+function getCategoryChartKey(category: MoneyCategory) {
+  return `category_${category.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`
+}
+
+function sumCategorySpend(transactions: MoneyTransaction[], month: string, category: MoneyCategory) {
+  return transactions
+    .filter((transaction) => transaction.amount < 0 && transaction.monthKey === month && transaction.category === category)
+    .reduce((total, transaction) => total + Math.abs(transaction.amount), 0)
 }
 
 function FlowBar({

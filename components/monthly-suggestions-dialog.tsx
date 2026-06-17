@@ -48,7 +48,7 @@ export function MonthlySuggestionsDialog({
         <DialogHeader>
           <DialogTitle>Suggestions for {monthLabel}</DialogTitle>
           <DialogDescription>
-            Focused actions and appreciation from the latest month in your workspace.
+            Focused actions and appreciation from the latest month in your data.
           </DialogDescription>
         </DialogHeader>
         <Carousel opts={{ align: "start" }} className="mx-auto w-full max-w-xl">
