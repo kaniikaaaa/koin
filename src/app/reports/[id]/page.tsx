@@ -68,7 +68,7 @@ export default function ReportPage() {
         </div>
         <div className="flex flex-wrap gap-3">
           <Button asChild variant="outline">
-            <Link href="/upload">
+            <Link href="/">
               <Upload className="size-4" />
               Upload
             </Link>
@@ -92,11 +92,11 @@ export default function ReportPage() {
             <FileText className="mx-auto size-10 text-primary" />
             <h2 className="mt-4 text-xl font-semibold">No report generated</h2>
             <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
-              Analyze transactions from the upload page, or load the sample report.
+              Analyze transactions from the home page, or load the sample report.
             </p>
             <div className="mt-5 flex justify-center gap-3">
               <Button asChild>
-                <Link href="/upload">Upload CSV</Link>
+                <Link href="/">Upload CSV</Link>
               </Button>
               <Button type="button" variant="outline" onClick={loadSampleReport}>
                 Load sample

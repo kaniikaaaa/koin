@@ -3,9 +3,11 @@
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"
-import { ArrowRight, Check, FileText, RefreshCw, Upload } from "lucide-react"
+import { ArrowRight, Check, FileText, Plus, RefreshCw } from "lucide-react"
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
 
+import { ChatPanel } from "@/components/chat-panel"
+import { ImportCsvButton } from "@/components/import-csv-button"
 import { MonthlySuggestionsDialog } from "@/components/monthly-suggestions-dialog"
 import { Button } from "@/components/ui/button"
 import {
@@ -40,6 +42,7 @@ import {
 } from "@/lib/moneymirror"
 import {
   appendAnalysisToStoredWorkspace,
+  clearMoneyMirrorData,
   loadWorkspace,
 } from "@/lib/moneymirror-storage"
 
@@ -79,6 +82,7 @@ export default function DashboardPage() {
   const [workspace, setWorkspace] = useState<MoneyWorkspace | null>(null)
   const [isLoaded, setIsLoaded] = useState(false)
   const [selectedCategories, setSelectedCategories] = useState<MoneyCategory[]>([])
+  const [importErrors, setImportErrors] = useState<string[]>([])
   const transactions = useMemo(() => (workspace ? getWorkspaceTransactions(workspace) : []), [workspace])
   const metrics = useMemo(() => getMoneyMetrics(transactions), [transactions])
   const report = useMemo(() => (transactions.length > 0 ? buildMoneyReport(transactions) : null), [transactions])
@@ -167,7 +171,7 @@ export default function DashboardPage() {
       setIsLoaded(true)
 
       if (getWorkspaceTransactions(stored).length === 0) {
-        router.replace("/upload")
+        router.replace("/")
       }
     }, 0)
 
@@ -178,7 +182,18 @@ export default function DashboardPage() {
     const analysis = analyzeSampleCsvs("multi")
     const current = workspace ?? loadWorkspace()
     const next = appendAnalysisToStoredWorkspace(current, analysis)
+    setImportErrors([])
     setWorkspace(next)
+  }
+
+  function handleImported(next: MoneyWorkspace) {
+    setImportErrors([])
+    setWorkspace(next)
+  }
+
+  function createNew() {
+    clearMoneyMirrorData()
+    router.push("/")
   }
 
   function toggleCategory(category: MoneyCategory) {
@@ -206,15 +221,14 @@ export default function DashboardPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
-          <Button asChild variant="outline">
-            <Link href="/upload">
-              <Upload className="size-4" />
-              Upload CSV
-            </Link>
-          </Button>
+          <ImportCsvButton onImported={handleImported} onError={setImportErrors} />
           <Button type="button" variant="secondary" onClick={loadSample}>
             <RefreshCw className="size-4" />
             Load sample
+          </Button>
+          <Button type="button" variant="outline" onClick={createNew}>
+            <Plus className="size-4" />
+            Create new
           </Button>
           <Button asChild>
             <Link href="/reports/current">
@@ -224,6 +238,14 @@ export default function DashboardPage() {
           </Button>
         </div>
       </div>
+
+      {importErrors.length > 0 ? (
+        <div className="mt-4 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+          {importErrors.map((error) => (
+            <p key={error}>{error}</p>
+          ))}
+        </div>
+      ) : null}
 
       <>
           <section className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -435,6 +457,8 @@ export default function DashboardPage() {
             <TransactionTable title="Recent transactions" transactions={metrics.recentTransactions} />
             <TransactionTable title="Biggest transactions" transactions={metrics.biggestTransactions} />
           </section>
+
+          <ChatPanel />
       </>
     </div>
   )

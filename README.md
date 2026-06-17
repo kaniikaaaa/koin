@@ -5,10 +5,10 @@ MoneyMirror is a local-first finance tracker MVP. It lets a user bring one or mo
 ## Current V1 Flow
 
 1. Open the app at `/`.
-2. Go to `/upload`.
-3. Upload one or more CSV files, paste CSV text, or use the sample CSV.
-4. Click `Analyze CSV` or `Analyze CSVs`.
-5. Review `/dashboard` and `/reports/current`.
+2. Drop or choose one or more CSV files (or load the sample) on the home page.
+3. You land on `/dashboard`. Use **Add more CSV** to append more statements in
+   place, or **Create new** to clear the workspace and start over.
+4. Review `/dashboard` and `/reports/current`.
 
 V1 stores the active multi-statement workspace only in browser `localStorage`. New CSV uploads append to the existing workspace. There is no login, database, bank connection, server-side statement storage, or AI service requirement.
 
@@ -27,7 +27,8 @@ V1 stores the active multi-statement workspace only in browser `localStorage`. N
 - Recent and biggest transaction tables
 - Local money summary with practical suggestions
 - Browser storage persistence
-- Delete workspace action
+- Create-new action that clears the local workspace
+- Chatbot-style assistant panel (LLM integration pending)
 
 ## Local Architecture
 

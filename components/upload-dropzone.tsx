@@ -5,11 +5,8 @@ import { useRouter } from "next/navigation"
 import { Plus, Sparkles } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import {
-  analyzeMoneyCsvFiles,
-  analyzeSampleCsvs,
-  type MoneyFilesAnalysisResult,
-} from "@/lib/moneymirror"
+import { analyzeSampleCsvs } from "@/lib/moneymirror"
+import { importCsvFiles } from "@/lib/csv-import"
 import {
   appendAnalysisToStoredWorkspace,
   loadWorkspace,
@@ -23,19 +20,16 @@ export function UploadDropzone() {
   const [errors, setErrors] = useState<string[]>([])
 
   async function analyzeFiles(files: File[]) {
-    const csvFiles = files.filter((file) => file.name.toLowerCase().endsWith(".csv") || file.type === "text/csv")
-
-    if (csvFiles.length === 0) {
-      setErrors(["Drop or choose at least one CSV file."])
-      return
-    }
-
     setIsAnalyzing(true)
     setErrors([])
 
     try {
-      const result = await analyzeMoneyCsvFiles(csvFiles)
-      saveAndOpenDashboard(result, csvFiles.length === 1 ? csvFiles[0].name : `${csvFiles.length} files`)
+      const result = await importCsvFiles(files)
+      if (result.ok) {
+        router.push("/dashboard")
+      } else {
+        setErrors(result.errors)
+      }
     } finally {
       setIsAnalyzing(false)
     }
@@ -43,12 +37,10 @@ export function UploadDropzone() {
 
   function loadSample() {
     setErrors([])
-    saveAndOpenDashboard(analyzeSampleCsvs("multi"), "sample data")
-  }
+    const analysis = analyzeSampleCsvs("multi")
 
-  function saveAndOpenDashboard(analysis: MoneyFilesAnalysisResult, sourceName: string) {
     if (analysis.transactions.length === 0) {
-      setErrors(analysis.errors.length > 0 ? analysis.errors : [`No transactions found in ${sourceName}.`])
+      setErrors(analysis.errors.length > 0 ? analysis.errors : ["No transactions found in sample data."])
       return
     }
 
