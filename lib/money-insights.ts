@@ -1,11 +1,66 @@
 import { formatCurrency } from "@/lib/money-format"
 import { getMoneyMetrics, getMonthlyMetrics } from "@/lib/money-metrics"
-import type { MonthlyMoneyMetrics, MonthlySuggestion, MoneyReport, MoneyTransaction } from "@/lib/money-types"
+import type {
+  MoneyCategory,
+  MonthlyMoneyMetrics,
+  MonthlySuggestion,
+  MoneyReport,
+  MoneyTransaction,
+} from "@/lib/money-types"
+
+type CategoryTotal = { category: MoneyCategory; amount: number }
+
+// Discretionary categories the user can realistically cut, in priority order.
+// `rate` is how much of that category is typically trimmable; `tip` is the move.
+const DISCRETIONARY_CUTS: { category: MoneyCategory; rate: number; tip: string }[] = [
+  { category: "Subscriptions", rate: 0.5, tip: "cancel plans you no longer actively use" },
+  { category: "Shopping", rate: 0.3, tip: "pause non-essential orders for a month" },
+  { category: "Travel", rate: 0.25, tip: "batch trips or pick cheaper options" },
+  { category: "Food", rate: 0.2, tip: "cook more and cut food delivery" },
+  { category: "Tools", rate: 0.25, tip: "drop overlapping or unused tools" },
+  { category: "Miscellaneous", rate: 0.25, tip: "label these and question the unplanned ones" },
+  { category: "Cash Withdrawal", rate: 0.15, tip: "track where the cash actually goes" },
+]
+
+// Fixed / non-discretionary categories — never suggest cutting these first.
+const FIXED_CATEGORIES: MoneyCategory[] = ["Rent", "Bills", "Investment", "Transfers", "Income"]
+
+type CutTarget = { category: MoneyCategory; amount: number; rate: number; tip: string; saving: number }
+
+// Rank cuttable categories by realistic monthly savings (biggest win first).
+function rankDiscretionaryCuts(categoryTotals: CategoryTotal[]): CutTarget[] {
+  const amountByCategory = new Map(categoryTotals.map((item) => [item.category, item.amount]))
+
+  return DISCRETIONARY_CUTS.map((cut) => {
+    const amount = amountByCategory.get(cut.category) ?? 0
+    return { ...cut, amount, saving: Math.round(amount * cut.rate) }
+  })
+    .filter((cut) => cut.saving > 0)
+    .sort((a, b) => b.saving - a.saving)
+}
+
+// The largest fixed cost present, used only to explain what NOT to cut first.
+function biggestFixedCost(categoryTotals: CategoryTotal[]): MoneyCategory | undefined {
+  return categoryTotals
+    .filter((item) => FIXED_CATEGORIES.includes(item.category) && item.amount > 0)
+    .sort((a, b) => b.amount - a.amount)[0]?.category
+}
+
+function asPercent(rate: number) {
+  return `${Math.round(rate * 100)}%`
+}
+
+function capitalize(text: string) {
+  return text.charAt(0).toUpperCase() + text.slice(1)
+}
 
 export function buildMoneyReport(transactions: MoneyTransaction[], workspaceId?: string): MoneyReport {
   const metrics = getMoneyMetrics(transactions)
   const monthlyMetrics = getMonthlyMetrics(transactions)
-  const savingsTarget = Math.round(metrics.biggestCategoryAmount * 0.25)
+  const cutTargets = rankDiscretionaryCuts(metrics.categoryTotals)
+  const primaryCut = cutTargets[0]
+  const secondaryCut = cutTargets[1]
+  const fixedAnchor = biggestFixedCost(metrics.categoryTotals)
   const repeated = metrics.merchantTotals.filter((merchant) => merchant.count > 1).slice(0, 3)
   const repeatedList = repeated.map((merchant) => merchant.merchant).join(", ") || "no repeated merchants yet"
   const comparisonLine =
@@ -41,12 +96,14 @@ export function buildMoneyReport(transactions: MoneyTransaction[], workspaceId?:
       },
     ],
     suggestions: [
-      savingsTarget > 0
-        ? `Cutting ${metrics.biggestCategory} by 25% could free up about ${formatCurrency(savingsTarget)}.`
-        : "Add more debit transactions to estimate a realistic savings target.",
-      repeated.length > 0
-        ? `Review repeated payments to ${repeatedList} before the next billing cycle.`
-        : "Look for repeated merchants once more transactions are uploaded.",
+      primaryCut
+        ? `Start with ${primaryCut.category}: ${primaryCut.tip}. Trimming ~${asPercent(primaryCut.rate)} frees about ${formatCurrency(primaryCut.saving)}${fixedAnchor ? ` — fixed costs like ${fixedAnchor} aren't worth targeting first` : ""}.`
+        : `Most spend sits in fixed costs${fixedAnchor ? ` like ${fixedAnchor}` : ""}. Track flexible areas (subscriptions, shopping, travel) to find realistic cuts.`,
+      secondaryCut
+        ? `Next, ${secondaryCut.tip} in ${secondaryCut.category} to save about ${formatCurrency(secondaryCut.saving)} more.`
+        : repeated.length > 0
+          ? `Review repeated payments to ${repeatedList} before the next billing cycle.`
+          : "Upload more transactions to surface repeated, cuttable spends.",
       metrics.netCashflow >= 0
         ? `Consider moving part of the ${formatCurrency(metrics.netCashflow)} surplus into an emergency fund, SIP, or low-cost index fund.`
         : "Stabilize cashflow first, then restart savings and investing from a small fixed amount.",
@@ -62,14 +119,15 @@ export function buildMonthlySuggestions(
 
   const suggestions: MonthlySuggestion[] = []
 
-  if (currentMonth.biggestCategoryAmount > 0) {
-    const target = Math.round(currentMonth.biggestCategoryAmount * 0.15)
+  const monthlyCut = rankDiscretionaryCuts(currentMonth.categoryTotals)[0]
+  if (monthlyCut) {
+    const fixedAnchor = biggestFixedCost(currentMonth.categoryTotals)
     suggestions.push({
       id: `${currentMonth.month}-cut-category`,
       tone: "suggestion",
-      title: `Trim ${currentMonth.biggestCategory}`,
-      detail: `This was the biggest spend area in ${currentMonth.monthLabel}. A 15% cut could free up about ${formatCurrency(target)} next month.`,
-      value: formatCurrency(currentMonth.biggestCategoryAmount),
+      title: `Trim ${monthlyCut.category}`,
+      detail: `${capitalize(monthlyCut.tip)}. A ${asPercent(monthlyCut.rate)} cut here could free about ${formatCurrency(monthlyCut.saving)} next month — far easier than touching fixed costs${fixedAnchor ? ` like ${fixedAnchor}` : ""}.`,
+      value: formatCurrency(monthlyCut.amount),
     })
   }
 
@@ -127,7 +185,7 @@ function buildIncreaseWarnings(currentMonth: MonthlyMoneyMetrics, previousMonth:
       }
     })
     .filter((item) => item.increase > Math.max(500, item.previousAmount * 0.15))
-    .filter((item) => item.category !== "Investment" && item.category !== "Transfers")
+    .filter((item) => !FIXED_CATEGORIES.includes(item.category))
     .sort((a, b) => b.increase - a.increase)
     .slice(0, 2)
     .map((item) => ({

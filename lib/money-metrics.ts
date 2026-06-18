@@ -1,6 +1,9 @@
 import { formatMonthLabel, getMonthSortValue, toMonthKey } from "@/lib/money-format"
 import type { MoneyCategory, MoneyMetrics, MoneyTransaction, MonthlyMoneyMetrics } from "@/lib/money-types"
 
+// Fixed / committed spend that shouldn't be flagged as a wasteful "money leak".
+const NON_LEAK_CATEGORIES: MoneyCategory[] = ["Rent", "Bills", "Investment", "Transfers", "Income"]
+
 export function getMoneyMetrics(transactions: MoneyTransaction[]): MoneyMetrics {
   const incomeTransactions = transactions.filter((transaction) => transaction.amount > 0)
   const expenseTransactions = transactions.filter((transaction) => transaction.amount < 0 && transaction.category !== "Transfers")
@@ -13,7 +16,11 @@ export function getMoneyMetrics(transactions: MoneyTransaction[]): MoneyMetrics 
 
   const merchantTotals = groupMerchantTotals(expenseTransactions)
   const biggestCategory = categoryTotals[0]
-  const topLeak = merchantTotals.find((merchant) => merchant.count > 1) ?? merchantTotals[0]
+  // Only flag flexible spend as a leak — never fixed costs like rent or bills.
+  const leakMerchantTotals = groupMerchantTotals(
+    expenseTransactions.filter((transaction) => !NON_LEAK_CATEGORIES.includes(transaction.category))
+  )
+  const topLeak = leakMerchantTotals.find((merchant) => merchant.count > 1) ?? leakMerchantTotals[0]
 
   return {
     totalIncome,
