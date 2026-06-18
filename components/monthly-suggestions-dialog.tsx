@@ -1,10 +1,11 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Lightbulb, Loader2, Sparkles, TrendingDown } from "lucide-react"
 
 import {
   Carousel,
+  type CarouselApi,
   CarouselContent,
   CarouselItem,
   CarouselNext,
@@ -61,9 +62,19 @@ export function MonthlySuggestionsDialog({
   const [aiTips, setAiTips] = useState<MonthlySuggestion[] | null>(null)
   const [status, setStatus] = useState<LoadStatus>("idle")
   const [loadedKey, setLoadedKey] = useState<string | null>(null)
+  const [api, setApi] = useState<CarouselApi>()
 
   // Identifies the data the tips were generated for; if it changes, refetch.
   const dataKey = `${monthLabel ?? ""}::${context ?? ""}`
+
+  // Embla mis-measures slide widths when it mounts during the dialog's open
+  // animation, which leaves the prev/next buttons stuck. Re-measure once the
+  // dialog has settled and whenever the slides change.
+  useEffect(() => {
+    if (!open || !api) return
+    const timer = window.setTimeout(() => api.reInit(), 160)
+    return () => window.clearTimeout(timer)
+  }, [open, api, status, aiTips])
 
   if (!monthLabel || suggestions.length === 0) {
     return (
@@ -128,7 +139,11 @@ export function MonthlySuggestionsDialog({
             </div>
           </div>
         ) : (
-          <Carousel opts={{ align: "start" }} className="mx-auto w-full max-w-xl">
+          <Carousel
+            setApi={setApi}
+            opts={{ align: "start", loop: true }}
+            className="mx-auto w-full max-w-xl"
+          >
             <CarouselContent>
               {slides.map((suggestion) => {
                 const meta = TONE_META[suggestion.tone] ?? TONE_META.suggestion

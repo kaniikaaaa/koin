@@ -101,6 +101,7 @@ function Carousel({
 
     return () => {
       window.clearTimeout(timer)
+      api?.off("reInit", onSelect)
       api?.off("select", onSelect)
     }
   }, [api, onSelect])
