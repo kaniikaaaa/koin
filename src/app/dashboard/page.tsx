@@ -298,6 +298,7 @@ export default function DashboardPage() {
               <MonthlySuggestionsDialog
                 monthLabel={latestMonth?.monthLabel}
                 suggestions={monthlySuggestions}
+                context={chatContext}
               />
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
