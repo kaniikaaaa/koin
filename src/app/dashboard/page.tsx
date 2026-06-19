@@ -3,13 +3,27 @@
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"
-import { ArrowRight, Check, FileText, Plus, RefreshCw } from "lucide-react"
+import {
+  ArrowDownRight,
+  ArrowRight,
+  ArrowUpRight,
+  Check,
+  PieChart,
+  Plus,
+  RefreshCw,
+  TrendingDown,
+  TrendingUp,
+} from "lucide-react"
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
 
+import { AppShell } from "@/components/app-shell"
 import { ChatPanel } from "@/components/chat-panel"
 import { ImportCsvButton } from "@/components/import-csv-button"
-import { MonthlySuggestionsDialog } from "@/components/monthly-suggestions-dialog"
+import { MetricCard } from "@/components/metric-card"
+import { SuggestionsPanel } from "@/components/suggestions-panel"
+import { track } from "@/lib/analytics"
 import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   ChartContainer,
   ChartLegend,
@@ -28,7 +42,6 @@ import {
 } from "@/components/ui/table"
 import {
   analyzeSampleCsvs,
-  buildMoneyReport,
   buildMonthlySuggestions,
   formatCompactCurrency,
   formatCurrency,
@@ -62,20 +75,19 @@ const monthlyChartConfig = {
 } satisfies ChartConfig
 
 const categoryChartColors = [
-  "#2dd4bf",
-  "#b79a55",
-  "#7f3f43",
-  "#8fb3a6",
-  "#7d8aa3",
-  "#c0a46d",
-  "#6c9088",
-  "#9b6b72",
-  "#6f7b65",
-  "#8d7faa",
-  "#a8754f",
+  "var(--color-chart-1)",
+  "var(--color-chart-2)",
+  "var(--color-chart-3)",
+  "var(--color-chart-4)",
+  "var(--color-chart-5)",
+  "var(--color-chart-6)",
+  "var(--color-chart-7)",
+  "var(--color-chart-8)",
 ]
 
-const expenseFilterCategories = moneyCategories.filter((category) => category !== "Income")
+const expenseFilterCategories = moneyCategories.filter(
+  (category) => category !== "Income" && category !== "Refund"
+)
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -85,7 +97,6 @@ export default function DashboardPage() {
   const [importErrors, setImportErrors] = useState<string[]>([])
   const transactions = useMemo(() => (workspace ? getWorkspaceTransactions(workspace) : []), [workspace])
   const metrics = useMemo(() => getMoneyMetrics(transactions), [transactions])
-  const report = useMemo(() => (transactions.length > 0 ? buildMoneyReport(transactions) : null), [transactions])
   const monthlyMetrics = useMemo(() => getMonthlyMetrics(transactions), [transactions])
   const hasCategoryFilter = selectedCategories.length > 0
   const selectedChartKeys = useMemo(() => selectedCategories.map(getCategoryChartKey), [selectedCategories])
@@ -172,7 +183,9 @@ export default function DashboardPage() {
       `Total expenses: ${formatCurrency(metrics.totalExpenses)}.`,
       `Net cashflow: ${formatCurrency(metrics.netCashflow)}.`,
       `Biggest category: ${metrics.biggestCategory} (${formatCurrency(metrics.biggestCategoryAmount)}).`,
-      `Top money leak: ${metrics.topMoneyLeak} (${formatCurrency(metrics.topMoneyLeakAmount)}).`,
+      // Merchant-free: the leak is described by amount only, never the merchant
+      // name, so no raw statement data leaves the browser for the AI features.
+      `Top recurring leak: ${formatCurrency(metrics.topMoneyLeakAmount)} of repeated discretionary spend.`,
     ]
 
     if (metrics.categoryTotals.length > 0) {
@@ -199,6 +212,8 @@ export default function DashboardPage() {
 
       if (getWorkspaceTransactions(stored).length === 0) {
         router.replace("/")
+      } else {
+        track("dashboard_viewed")
       }
     }, 0)
 
@@ -211,6 +226,7 @@ export default function DashboardPage() {
     const next = appendAnalysisToStoredWorkspace(current, analysis)
     setImportErrors([])
     setWorkspace(next)
+    track("sample_loaded")
   }
 
   function handleImported(next: MoneyWorkspace) {
@@ -220,6 +236,7 @@ export default function DashboardPage() {
 
   function createNew() {
     clearMoneyMirrorData()
+    track("workspace_created")
     router.push("/")
   }
 
@@ -231,56 +248,66 @@ export default function DashboardPage() {
     )
   }
 
-  if (!isLoaded || transactions.length === 0) {
+  if (!isLoaded) {
+    return (
+      <AppShell>
+        <DashboardSkeleton />
+      </AppShell>
+    )
+  }
+
+  if (transactions.length === 0) {
     return null
   }
 
+  const sidebarActions = (
+    <>
+      <ImportCsvButton
+        className="w-full justify-start"
+        onImported={handleImported}
+        onError={setImportErrors}
+      />
+      <Button type="button" variant="secondary" className="w-full justify-start" onClick={loadSample}>
+        <RefreshCw className="size-4" />
+        Load sample
+      </Button>
+      <Button type="button" variant="outline" className="w-full justify-start" onClick={createNew}>
+        <Plus className="size-4" />
+        Create new
+      </Button>
+    </>
+  )
+
   return (
-    <div className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="text-sm font-medium uppercase tracking-[0.18em] text-primary">Dashboard</p>
-          <h1 className="mt-2 text-3xl font-semibold tracking-normal">Money overview</h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-            {transactions.length > 0
-              ? `${transactions.length} transactions across ${monthlyMetrics.length} month${monthlyMetrics.length === 1 ? "" : "s"}.`
-              : "Upload a CSV or load sample data."}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-3">
-          <ImportCsvButton onImported={handleImported} onError={setImportErrors} />
-          <Button type="button" variant="secondary" onClick={loadSample}>
-            <RefreshCw className="size-4" />
-            Load sample
-          </Button>
-          <Button type="button" variant="outline" onClick={createNew}>
-            <Plus className="size-4" />
-            Create new
-          </Button>
-          <Button asChild>
-            <Link href="/reports/current">
-              <FileText className="size-4" />
-              Report
-            </Link>
-          </Button>
-        </div>
+    <AppShell actions={sidebarActions}>
+      <div>
+        <p className="font-mono text-xs uppercase tracking-[0.2em] text-primary">Dashboard</p>
+        <h1 className="mt-2 text-3xl font-semibold tracking-tight">Money overview</h1>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+          {`${transactions.length} transactions across ${monthlyMetrics.length} month${monthlyMetrics.length === 1 ? "" : "s"}.`}
+        </p>
       </div>
 
       {importErrors.length > 0 ? (
         <div className="mt-4 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-          {importErrors.map((error) => (
-            <p key={error}>{error}</p>
-          ))}
+          <p className="font-medium">We couldn&apos;t import that file</p>
+          <div className="mt-1 space-y-0.5 text-destructive/90">
+            {importErrors.map((error) => (
+              <p key={error}>{error}</p>
+            ))}
+          </div>
+          <p className="mt-2 text-destructive/80">
+            Make sure it has Date, Description, and Amount (or Debit/Credit) columns — or try Load sample.
+          </p>
         </div>
       ) : null}
 
-      <>
-          <section className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-            <Metric label="Total income" value={formatCurrency(metrics.totalIncome)} tone="green" />
-            <Metric label="Total expenses" value={formatCurrency(metrics.totalExpenses)} tone="dark" />
-            <Metric label="Net cashflow" value={formatCurrency(metrics.netCashflow)} tone="gold" />
-            <Metric label="Biggest category" value={metrics.biggestCategory} detail={formatCurrency(metrics.biggestCategoryAmount)} />
-            <Metric label="Top money leak" value={metrics.topMoneyLeak} detail={formatCurrency(metrics.topMoneyLeakAmount)} />
+      <section className="mt-8 grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+            <MetricCard label="Total income" value={formatCurrency(metrics.totalIncome)} tone="green" icon={ArrowUpRight} />
+            <MetricCard label="Total expenses" value={formatCurrency(metrics.totalExpenses)} tone="dark" icon={ArrowDownRight} />
+            <MetricCard label="Net cashflow" value={formatCurrency(metrics.netCashflow)} tone="gold" icon={TrendingUp} />
+            <MetricCard label="Biggest category" value={metrics.biggestCategory} detail={formatCurrency(metrics.biggestCategoryAmount)} icon={PieChart} />
+            <MetricCard label="Top money leak" value={metrics.topMoneyLeak} detail={formatCurrency(metrics.topMoneyLeakAmount)} icon={TrendingDown} />
           </section>
 
           <section className="mt-6 rounded-lg border border-border bg-card p-4">
@@ -295,11 +322,6 @@ export default function DashboardPage() {
                     : "Upload another month to compare spending patterns."}
                 </p>
               </div>
-              <MonthlySuggestionsDialog
-                monthLabel={latestMonth?.monthLabel}
-                suggestions={monthlySuggestions}
-                context={chatContext}
-              />
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
               <Button
@@ -316,7 +338,7 @@ export default function DashboardPage() {
                 return (
                   <label
                     key={category}
-                    className={`inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border px-2.5 text-sm font-medium transition-colors ${
+                    className={`inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border px-2.5 text-sm font-medium transition-colors focus-within:outline-none focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background ${
                       checked
                         ? "border-primary bg-primary text-primary-foreground"
                         : "border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -427,7 +449,7 @@ export default function DashboardPage() {
                     <div key={item.category} className="grid gap-2">
                       <div className="flex items-center justify-between gap-3 text-sm">
                         <span className="font-medium">{item.category}</span>
-                        <span className="text-muted-foreground">{formatCurrency(item.amount)}</span>
+                        <span className="font-mono tabular-nums text-muted-foreground">{formatCurrency(item.amount)}</span>
                       </div>
                       <div className="h-3 overflow-hidden rounded-full bg-muted">
                         <div
@@ -449,7 +471,7 @@ export default function DashboardPage() {
                 <FlowBar label="Expenses" amount={metrics.totalExpenses} max={maxFlow} className="bg-expense" />
                 <div className="rounded-lg bg-muted p-4">
                   <p className="text-sm text-muted-foreground">Cashflow read</p>
-                  <p className="mt-2 text-xl font-semibold">
+                  <p className="mt-2 font-mono text-xl font-semibold tabular-nums">
                     {metrics.netCashflow >= 0 ? "Positive" : "Negative"} {formatCurrency(metrics.netCashflow)}
                   </p>
                 </div>
@@ -457,29 +479,11 @@ export default function DashboardPage() {
             </div>
           </section>
 
-          {report ? (
-            <section className="mt-6 rounded-lg border border-border bg-card p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h2 className="font-medium">What to cut first</h2>
-                  <p className="mt-1 text-sm text-muted-foreground">Practical recommendations from the current data.</p>
-                </div>
-                <Button asChild variant="outline">
-                  <Link href="/reports/current">
-                    Full report
-                    <ArrowRight className="size-4" />
-                  </Link>
-                </Button>
-              </div>
-              <div className="mt-4 grid gap-3 md:grid-cols-3">
-                {report.suggestions.map((suggestion) => (
-                  <p key={suggestion} className="rounded-lg bg-muted p-3 text-sm leading-6">
-                    {suggestion}
-                  </p>
-                ))}
-              </div>
-            </section>
-          ) : null}
+          <SuggestionsPanel
+            monthLabel={latestMonth?.monthLabel}
+            suggestions={monthlySuggestions}
+            context={chatContext}
+          />
 
           <section className="mt-6 grid gap-6 lg:grid-cols-2">
             <TransactionTable title="Recent transactions" transactions={metrics.recentTransactions} />
@@ -487,36 +491,21 @@ export default function DashboardPage() {
           </section>
 
           <ChatPanel context={chatContext} />
-      </>
-    </div>
+    </AppShell>
   )
 }
 
-function Metric({
-  label,
-  value,
-  detail,
-  tone,
-}: {
-  label: string
-  value: string
-  detail?: string
-  tone?: "green" | "gold" | "dark"
-}) {
-  const toneClass =
-    tone === "green"
-      ? "bg-primary text-primary-foreground"
-      : tone === "gold"
-        ? "bg-accent text-accent-foreground"
-        : tone === "dark"
-          ? "bg-expense text-expense-foreground"
-          : "bg-card"
-
+function DashboardSkeleton() {
   return (
-    <div className={`rounded-lg border border-border p-4 ${toneClass}`}>
-      <p className="text-sm opacity-75">{label}</p>
-      <p className="mt-3 break-words text-2xl font-semibold">{value}</p>
-      {detail ? <p className="mt-2 text-sm opacity-75">{detail}</p> : null}
+    <div aria-hidden>
+      <Skeleton className="h-9 w-48" />
+      <Skeleton className="mt-3 h-4 w-72" />
+      <section className="mt-8 grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+        {Array.from({ length: 5 }).map((_, index) => (
+          <Skeleton key={index} className="h-28" />
+        ))}
+      </section>
+      <Skeleton className="mt-6 h-80" />
     </div>
   )
 }
@@ -546,12 +535,27 @@ function FlowBar({
     <div className="grid gap-2">
       <div className="flex justify-between text-sm">
         <span className="font-medium">{label}</span>
-        <span className="text-muted-foreground">{formatCurrency(amount)}</span>
+        <span className="font-mono tabular-nums text-muted-foreground">{formatCurrency(amount)}</span>
       </div>
       <div className="h-10 rounded-lg bg-muted p-1">
         <div className={`h-full rounded-md ${className}`} style={{ width: `${Math.max(8, (amount / max) * 100)}%` }} />
       </div>
     </div>
+  )
+}
+
+function AmountTag({ amount, className = "" }: { amount: number; className?: string }) {
+  const positive = amount >= 0
+  const Icon = positive ? ArrowUpRight : ArrowDownRight
+  return (
+    <span
+      className={`inline-flex items-center gap-1 font-mono tabular-nums ${
+        positive ? "text-positive" : "text-expense"
+      } ${className}`}
+    >
+      <Icon className="size-3.5" />
+      {formatCurrency(amount)}
+    </span>
   )
 }
 
@@ -561,26 +565,47 @@ function TransactionTable({ title, transactions }: { title: string; transactions
       <div className="border-b border-border p-4">
         <h2 className="font-medium">{title}</h2>
       </div>
-      <Table className="min-w-[720px]">
-        <TableHeader>
-          <TableRow>
-            <TableHead>Date</TableHead>
-            <TableHead>Description</TableHead>
-            <TableHead>Category</TableHead>
-            <TableHead className="text-right">Amount</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {transactions.map((transaction) => (
-            <TableRow key={transaction.id}>
-              <TableCell>{transaction.date}</TableCell>
-              <TableCell className="max-w-48 whitespace-normal">{transaction.description}</TableCell>
-              <TableCell>{transaction.category}</TableCell>
-              <TableCell className="text-right">{formatCurrency(transaction.amount)}</TableCell>
+
+      {/* Desktop: table */}
+      <div className="hidden md:block">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Date</TableHead>
+              <TableHead>Description</TableHead>
+              <TableHead>Category</TableHead>
+              <TableHead className="text-right">Amount</TableHead>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {transactions.map((transaction) => (
+              <TableRow key={transaction.id}>
+                <TableCell className="font-mono text-xs text-muted-foreground">{transaction.date}</TableCell>
+                <TableCell className="max-w-48 whitespace-normal">{transaction.description}</TableCell>
+                <TableCell className="text-muted-foreground">{transaction.category}</TableCell>
+                <TableCell className="text-right">
+                  <AmountTag amount={transaction.amount} />
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+
+      {/* Mobile: stacked cards — no horizontal scroll */}
+      <ul className="divide-y divide-border md:hidden">
+        {transactions.map((transaction) => (
+          <li key={transaction.id} className="flex items-center justify-between gap-3 p-4">
+            <div className="min-w-0">
+              <p className="truncate text-sm">{transaction.description}</p>
+              <p className="mt-0.5 font-mono text-xs text-muted-foreground">
+                {transaction.date} · {transaction.category}
+              </p>
+            </div>
+            <AmountTag amount={transaction.amount} className="shrink-0 text-sm" />
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }

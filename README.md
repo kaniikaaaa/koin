@@ -10,7 +10,7 @@ MoneyMirror is a local-first finance tracker MVP. It lets a user bring one or mo
    place, or **Create new** to clear the workspace and start over.
 4. Review `/dashboard` and `/reports/current`.
 
-V1 stores the active multi-statement workspace only in browser `localStorage`. New CSV uploads append to the existing workspace. There is no login, database, bank connection, server-side statement storage, or AI service requirement.
+V1 stores the active multi-statement workspace only in browser `localStorage`. New CSV uploads append to the existing workspace. There is no login, database, bank connection, or server-side statement storage. The only server code is two stateless API routes (`/api/chat`, `/api/suggestions`) that proxy the optional AI features to OpenAI; they receive an anonymized, merchant-free spending summary (totals by category and month), never your raw statement.
 
 ## Features
 
@@ -28,7 +28,7 @@ V1 stores the active multi-statement workspace only in browser `localStorage`. N
 - Local money summary with practical suggestions
 - Browser storage persistence
 - Create-new action that clears the local workspace
-- Chatbot-style assistant panel (LLM integration pending)
+- AI assistant panel and AI monthly tips, powered by OpenAI (optional — set `OPENAI_API_KEY`)
 
 ## Local Architecture
 
@@ -54,14 +54,35 @@ npm test
 
 `npm test` runs lint and a production build.
 
+## Deploy
+
+The app needs a Node runtime (the `/api/chat` and `/api/suggestions` routes call
+OpenAI server-side), so it can't be a pure static export. Vercel needs no config:
+
+```bash
+npx vercel --prod
+```
+
+Set `OPENAI_API_KEY` (and optionally `OPENAI_CHAT_MODEL`, `NEXT_PUBLIC_NOVUS_SRC`)
+in the Vercel project env. Without `OPENAI_API_KEY` the core local flow still
+works and the AI chat degrades to a friendly "assistant not configured" message
+instead of erroring. See `.env.example`.
+
+## Analytics
+
+Product analytics is wired through `lib/analytics.ts` (a privacy-safe event
+allowlist — no financial data) and `components/novus-analytics.tsx` (loads the
+snippet from `NEXT_PUBLIC_NOVUS_SRC`). Set that env var to your Novus.ai loader
+URL to enable it; unset, it is a no-op.
+
 ## Privacy Model
 
 - No login.
 - No database.
 - No bank connection.
-- No server-side statement storage.
-- No raw transaction data sent to analytics.
-- `Delete workspace` clears browser storage.
+- No server-side statement storage — your CSV and its transactions stay in `localStorage`.
+- The optional AI chat and tips send an anonymized, merchant-free summary (totals by category and month) to OpenAI; raw transactions and merchant names never leave your browser.
+- `Create new` clears browser storage.
 
 ## Later
 

@@ -1,11 +1,27 @@
 import type { Metadata } from "next"
-import Link from "next/link"
+import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google"
 
+import { NovusAnalytics } from "@/components/novus-analytics"
 import "./globals.css"
 
+const plexSans = IBM_Plex_Sans({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-plex-sans",
+  display: "swap",
+})
+
+const plexMono = IBM_Plex_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--font-plex-mono",
+  display: "swap",
+})
+
 export const metadata: Metadata = {
-  title: "MoneyMirror",
-  description: "Local-first finance tracker MVP for CSV transaction analysis.",
+  title: "Koin — see where your money went, privately",
+  description:
+    "Drop a bank-statement CSV and read it back like a clean statement — income, expenses, leaks, and a plain-English summary. Parsed and kept in your browser. No account, no bank login.",
 }
 
 export default function RootLayout({
@@ -14,19 +30,10 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en" className={`dark ${plexSans.variable} ${plexMono.variable}`}>
       <body>
-        <header className="border-b border-border/80 bg-card/80 backdrop-blur">
-          <div className="mx-auto flex min-h-16 w-full max-w-7xl items-center px-4 py-3 sm:px-6">
-            <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight">
-              <span className="grid size-9 place-items-center rounded-lg bg-primary text-primary-foreground">
-                MM
-              </span>
-              <span>MoneyMirror</span>
-            </Link>
-          </div>
-        </header>
-        <main>{children}</main>
+        {children}
+        <NovusAnalytics />
       </body>
     </html>
   )

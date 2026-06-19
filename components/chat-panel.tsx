@@ -11,7 +11,6 @@ import { Bot, Send, Sparkles } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { Markdown } from "@/components/markdown"
 import { createChatMessage, getAssistantReply, type ChatMessage } from "@/lib/chat"
 
 type PanelMessage = ChatMessage & { error?: boolean }
@@ -56,7 +55,9 @@ export function ChatPanel({ context }: { context?: string }) {
       const reply = await getAssistantReply(nextMessages, context)
       setMessages((current) => [...current, createChatMessage("assistant", reply)])
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Something went wrong."
+      console.error("Chat request failed:", error)
+      const message =
+        "I can't reach the assistant right now — the numbers in your dashboard above are still accurate. Try again in a moment."
       setMessages((current) => [...current, { ...createChatMessage("assistant", message), error: true }])
     } finally {
       setIsReplying(false)
@@ -83,7 +84,7 @@ export function ChatPanel({ context }: { context?: string }) {
           <Sparkles className="size-5" />
         </span>
         <div>
-          <h2 className="font-medium leading-tight">Ask MoneyMirror</h2>
+          <h2 className="font-medium leading-tight">Ask koin</h2>
           <p className="text-sm text-muted-foreground">Questions about your spending, answered.</p>
         </div>
       </div>
@@ -134,7 +135,7 @@ export function ChatPanel({ context }: { context?: string }) {
           value={input}
           onChange={(event) => setInput(event.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Message MoneyMirror… (Enter to send, Shift+Enter for a new line)"
+          placeholder="Message koin… (Enter to send, Shift+Enter for a new line)"
           className="max-h-40 min-h-10 flex-1 resize-none"
           rows={1}
         />
@@ -143,23 +144,22 @@ export function ChatPanel({ context }: { context?: string }) {
           Send
         </Button>
       </form>
+      <p className="px-3 pb-3 text-[11px] leading-4 text-muted-foreground">
+        Chat sends an anonymized, merchant-free summary (your totals by category and month) to OpenAI to answer. Your
+        statement and its transactions stay in your browser.
+      </p>
     </section>
   )
 }
 
 function MessageBubble({ message }: { message: PanelMessage }) {
   const isUser = message.role === "user"
-  // Only the assistant's normal replies contain markdown; user input and error
-  // bubbles stay as literal text.
-  const renderMarkdown = !isUser && !message.error
 
   return (
     <div className={`flex items-end gap-2 ${isUser ? "justify-end" : "justify-start"}`}>
       {!isUser ? <Avatar /> : null}
       <div
-        className={`max-w-[80%] rounded-2xl px-3.5 py-2.5 text-sm leading-6 ${
-          renderMarkdown ? "" : "whitespace-pre-wrap"
-        } ${
+        className={`max-w-[80%] whitespace-pre-wrap rounded-2xl px-3.5 py-2.5 text-sm leading-6 ${
           isUser
             ? "rounded-br-sm bg-primary text-primary-foreground"
             : message.error
@@ -167,7 +167,7 @@ function MessageBubble({ message }: { message: PanelMessage }) {
               : "rounded-bl-sm bg-muted text-foreground"
         }`}
       >
-        {renderMarkdown ? <Markdown>{message.content}</Markdown> : message.content}
+        {message.content}
       </div>
     </div>
   )

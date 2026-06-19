@@ -43,6 +43,7 @@ export async function importCsvFiles(files: File[]): Promise<CsvImportResult> {
     }
   }
 
-  const workspace = appendAnalysisToStoredWorkspace(loadWorkspace(), analysis)
+  const current = loadWorkspace()
+  const workspace = appendAnalysisToStoredWorkspace(current, analysis)
   return { ok: true, workspace, sourceName }
 }

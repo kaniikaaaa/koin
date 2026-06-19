@@ -105,7 +105,14 @@ export function updateWorkspaceTransactionCategory(
   const transaction = workspace.transactionsById[transactionId]
   if (!transaction) return workspace
 
-  const type: TransactionType = category === "Income" ? "income" : category === "Transfers" ? "transfer" : "debit"
+  const type: TransactionType =
+    category === "Income"
+      ? "income"
+      : category === "Refund"
+        ? "refund"
+        : category === "Transfers"
+          ? "transfer"
+          : "debit"
 
   return {
     ...workspace,
@@ -252,7 +259,8 @@ function readTransactionRecord(raw: unknown) {
 }
 
 function readTransactionType(raw: unknown, category: MoneyCategory, amount: number): TransactionType {
-  if (raw === "income" || raw === "debit" || raw === "transfer") return raw
+  if (raw === "income" || raw === "debit" || raw === "transfer" || raw === "refund") return raw
+  if (category === "Refund") return "refund"
   if (category === "Transfers") return "transfer"
   return amount > 0 ? "income" : "debit"
 }

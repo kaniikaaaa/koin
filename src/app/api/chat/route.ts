@@ -8,7 +8,7 @@ type IncomingMessage = { role: "user" | "assistant"; content: string }
 
 const DEFAULT_MODEL = "gpt-4o-mini"
 
-const SYSTEM_PROMPT = `You are MoneyMirror, a personal-finance assistant built into a local-first finance tracker. You ONLY help with the user's money: understanding their uploaded transactions, spending categories, budgeting, saving, and general personal-finance education.
+const SYSTEM_PROMPT = `You are Koin, a personal-finance assistant built into a local-first finance tracker. You ONLY help with the user's money: understanding their uploaded transactions, spending categories, budgeting, saving, and general personal-finance education.
 
 ## Scope
 You help with anything about the user's personal finances. This is BROAD — all of these are IN scope and you should answer them helpfully:
@@ -50,10 +50,12 @@ function isDisallowed(text: string) {
 export async function POST(request: Request) {
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) {
-    return Response.json(
-      { error: "OPENAI_API_KEY is not set. Add it to your .env file and restart the dev server." },
-      { status: 500 }
-    )
+    // Degrade gracefully instead of 500-ing: a keyless deploy still shows a
+    // helpful bubble, and the dashboard numbers above remain accurate.
+    return Response.json({
+      reply:
+        "The AI assistant isn't switched on for this deployment yet. Your dashboard totals, categories, and monthly comparison above are all computed locally and are accurate — set OPENAI_API_KEY to enable chat.",
+    })
   }
 
   let body: { messages?: IncomingMessage[]; context?: string }
@@ -74,10 +76,13 @@ export async function POST(request: Request) {
     return Response.json({ error: "No messages provided." }, { status: 400 })
   }
 
-  // Screen the latest user message for gambling / illegal intent and refuse
-  // immediately. Returned as a normal reply so the chat shows it as a message.
-  const lastUserMessage = [...messages].reverse().find((message) => message.role === "user")
-  if (lastUserMessage && isDisallowed(lastUserMessage.content)) {
+  // Screen every user message for gambling / illegal intent (not just the latest,
+  // so the ask can't be smuggled in across two turns) and refuse immediately.
+  // Returned as a normal reply so the chat shows it as a message.
+  const hasDisallowedRequest = messages.some(
+    (message) => message.role === "user" && isDisallowed(message.content)
+  )
+  if (hasDisallowedRequest) {
     return Response.json({ reply: DISALLOWED_REPLY })
   }
 

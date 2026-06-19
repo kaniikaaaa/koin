@@ -70,7 +70,7 @@ export function buildMoneyReport(transactions: MoneyTransaction[], workspaceId?:
 
   const summary =
     transactions.length === 0
-      ? "Upload transactions to generate a MoneyMirror summary."
+      ? "Upload transactions to generate a Koin summary."
       : `Most money went to ${metrics.biggestCategory}, with ${formatCurrency(metrics.biggestCategoryAmount)} spent there. Repeated expenses include ${repeatedList}. Net cashflow is ${formatCurrency(metrics.netCashflow)}. ${comparisonLine}`
 
   return {

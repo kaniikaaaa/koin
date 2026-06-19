@@ -1,12 +1,12 @@
 // AI money-tip generator. Given a finance summary it returns structured tips
-// (JSON) used by the monthly suggestions carousel. Runs server-side so the
+// (JSON) used by the inline monthly suggestions panel. Runs server-side so the
 // OpenAI key stays out of the browser.
 
 export const runtime = "nodejs"
 
 const DEFAULT_MODEL = "gpt-4o-mini"
 
-const SYSTEM_PROMPT = `You are MoneyMirror, a practical personal-finance coach. Given a summary of the user's spending, produce specific, actionable money tips.
+const SYSTEM_PROMPT = `You are Koin, a practical personal-finance coach. Given a summary of the user's spending, produce specific, actionable money tips.
 
 Rules:
 - Return AT LEAST 3 and at most 5 tips.

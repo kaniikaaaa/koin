@@ -70,8 +70,24 @@ const categoryRules: Rule[] = [
   },
 ]
 
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+}
+
+// Match keywords on word boundaries so "gas" doesn't fire on "Las Vegas" and
+// "rent" doesn't fire on "current"/"parent". Compiled once per rule.
+const compiledRules = categoryRules.map((rule) => ({
+  ...rule,
+  pattern: new RegExp(`\\b(${rule.keywords.map(escapeRegExp).join("|")})\\b`, "i"),
+}))
+
+// Positive amounts that are really reversals of spend (refunds, cashback,
+// chargebacks) rather than income — kept out of the income total.
+const REFUND_PATTERN = /\b(refunds?|refunded|reversals?|reversed|charge\s?backs?|cashback|returned)\b/i
+
 export const moneyCategories: MoneyCategory[] = [
   "Income",
+  "Refund",
   "Food",
   "Rent",
   "Travel",
@@ -97,6 +113,16 @@ export function categorizeTransaction(transaction: MoneyTransaction): MoneyTrans
   if (transaction.reason === "Manually edited by user") return transaction
 
   if (transaction.amount > 0) {
+    if (REFUND_PATTERN.test(`${transaction.description} ${transaction.merchant}`)) {
+      return {
+        ...transaction,
+        type: "refund",
+        category: "Refund",
+        confidence: 0.9,
+        reason: "Refund or reversal — kept out of income",
+      }
+    }
+
     return {
       ...transaction,
       type: "income",
@@ -106,8 +132,8 @@ export function categorizeTransaction(transaction: MoneyTransaction): MoneyTrans
     }
   }
 
-  const haystack = `${transaction.description} ${transaction.merchant}`.toLowerCase()
-  const rule = categoryRules.find((candidate) => candidate.keywords.some((keyword) => haystack.includes(keyword)))
+  const haystack = `${transaction.description} ${transaction.merchant}`
+  const rule = compiledRules.find((candidate) => candidate.pattern.test(haystack))
 
   if (!rule) {
     return {

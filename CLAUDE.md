@@ -4,9 +4,10 @@
 
 Local-first personal finance tracker (MVP). A user brings one or more CSV bank
 statements; everything is parsed, categorized, and analyzed **in the browser**.
-There is no backend, database, auth, or bank connection. The active workspace
-lives only in `localStorage`. An in-app chat assistant is scaffolded but **not
-yet connected to an LLM**.
+There is no database, auth, or bank connection. The active workspace lives only
+in `localStorage`. The only server code is two stateless API routes that proxy
+the **optional** AI chat/tips to OpenAI (see "Chat assistant" below); they
+receive an anonymized, merchant-free spending summary, never the raw statement.
 
 ## Commands
 
@@ -64,24 +65,40 @@ route. Modules:
 - `moneymirror-storage.ts` — `loadWorkspace`, `saveWorkspace`,
   `appendAnalysisToStoredWorkspace`, `clearMoneyMirrorData`
 - `csv-import.ts` — shared client CSV import (`importCsvFiles`, `filterCsvFiles`)
-- `chat.ts` — chat types + `getAssistantReply` **(LLM stub — see below)**
+- `chat.ts` — chat types + `getAssistantReply` (POSTs to `/api/chat`; see below)
 - `utils.ts` — `cn()` class merger
 
 ## `components/`
 
-- `ui/*` — shadcn-style primitives (`button`, `input`, `textarea`, `card`,
-  `dialog`, `carousel`, `table`, `chart`)
+- `ui/*` — official shadcn/ui primitives (`button`, `input`, `textarea`, `card`,
+  `dialog`, `table`, `chart`, `sidebar`, `sheet`, `tooltip`, `skeleton`, `badge`,
+  `separator`) + `hooks/use-mobile.ts`
+- `app-shell.tsx` — dashboard/report shell: official shadcn **Sidebar** (left rail
+  on `lg+`, drawer on mobile) with nav + an `actions` slot, wrapping page content
+  in `SidebarInset`. Used by `/dashboard` and `/reports/[id]`.
+- `metric-card.tsx` — shared semantic metric card (mono tabular value + tone + icon),
+  used by the dashboard and report metric strips
+- `novus-analytics.tsx` — injects the Novus loader from `NEXT_PUBLIC_NOVUS_SRC`
 - `upload-dropzone.tsx` — drag/drop + file-picker upload on the home page
 - `import-csv-button.tsx` — "Add more CSV" button (file picker, appends in place)
 - `chat-panel.tsx` — dashboard chat UI
-- `monthly-suggestions-dialog.tsx` — dialog + carousel of monthly insights
+- `suggestions-panel.tsx` — inline monthly tips on the dashboard (AI + built-in
+  fallback, responsive `Card` grid; replaced the old carousel dialog)
 
 ## Conventions
 
 - Path alias: `@/*` → repo root (`tsconfig.json`). So `lib/` and `components/`
   sit at the project root while routes live under `src/app/`.
-- Styling: Tailwind v4; dark-only theme via CSS variables in
-  `src/app/globals.css`; compose classes with `cn()`.
+- Brand: **Koin** (the repo, `lib/money-*` modules, and `moneymirror:*`
+  `localStorage` keys keep their internal `moneymirror` naming on purpose).
+- Styling: Tailwind v4; dark **"Terminal"** theme (neutral ink + credit-green /
+  debit-oxblood / brass accents) via CSS variables in `src/app/globals.css`;
+  compose classes with `cn()`. Semantic + `chart-1..8` + `sidebar-*` tokens live
+  there, plus the base `@layer base { * { @apply border-border } }` (without it,
+  Tailwind v4 defaults borders to `currentColor`).
+- Typography: IBM Plex Sans (UI) + IBM Plex Mono for every figure
+  (`font-mono tabular-nums`, right-aligned).
+- Responsive: data tables collapse to stacked cards under `md` (no horizontal scroll).
 - Code style: double quotes, no semicolons (match surrounding files).
 - Client components that touch `localStorage` load it inside a `useEffect`
   (avoids SSR/hydration mismatch).

@@ -5,7 +5,11 @@ import type { MoneyCategory, MoneyMetrics, MoneyTransaction, MonthlyMoneyMetrics
 const NON_LEAK_CATEGORIES: MoneyCategory[] = ["Rent", "Bills", "Investment", "Transfers", "Income"]
 
 export function getMoneyMetrics(transactions: MoneyTransaction[]): MoneyMetrics {
-  const incomeTransactions = transactions.filter((transaction) => transaction.amount > 0)
+  // Refunds/reversals are positive but are not income — excluding them keeps
+  // totalIncome (and the "surplus to invest" suggestions) honest.
+  const incomeTransactions = transactions.filter(
+    (transaction) => transaction.amount > 0 && transaction.type !== "refund"
+  )
   const expenseTransactions = transactions.filter((transaction) => transaction.amount < 0 && transaction.category !== "Transfers")
 
   const totalIncome = sum(incomeTransactions.map((transaction) => transaction.amount))

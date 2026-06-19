@@ -1,9 +1,10 @@
-export type TransactionType = "income" | "debit" | "transfer"
+export type TransactionType = "income" | "debit" | "transfer" | "refund"
 
 export type MoneySourceType = "csv" | "pdf" | "screenshot"
 
 export type MoneyCategory =
   | "Income"
+  | "Refund"
   | "Food"
   | "Rent"
   | "Travel"

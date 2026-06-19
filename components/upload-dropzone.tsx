@@ -2,9 +2,10 @@
 
 import { useRef, useState, type DragEvent } from "react"
 import { useRouter } from "next/navigation"
-import { Plus, Sparkles } from "lucide-react"
+import { FileSpreadsheet, FileText, Upload } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { track } from "@/lib/analytics"
 import { analyzeSampleCsvs } from "@/lib/moneymirror"
 import { importCsvFiles } from "@/lib/csv-import"
 import {
@@ -26,6 +27,7 @@ export function UploadDropzone() {
     try {
       const result = await importCsvFiles(files)
       if (result.ok) {
+        track("csv_imported")
         router.push("/dashboard")
       } else {
         setErrors(result.errors)
@@ -68,7 +70,7 @@ export function UploadDropzone() {
     <div className="mx-auto w-full max-w-xl px-4">
       <div
         aria-label="Upload CSV files"
-        className={`grid min-h-80 cursor-pointer place-items-center rounded-lg border border-dashed p-8 text-center transition-colors ${
+        className={`grid min-h-80 cursor-pointer place-items-center rounded-lg border border-dashed p-8 text-center transition-colors outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
           isDragging
             ? "border-primary bg-primary/10"
             : "border-border bg-card hover:border-primary/70 hover:bg-muted/30"
@@ -94,37 +96,49 @@ export function UploadDropzone() {
 
         <div className="space-y-5">
           <div className="mx-auto grid size-20 place-items-center rounded-full border border-primary/40 bg-primary/10 text-primary">
-            <Plus className="size-10" />
+            <FileSpreadsheet className="size-9" />
           </div>
           <div>
-            <h1 className="text-2xl font-semibold">Drop your files here</h1>
-            <p className="mt-2 text-sm text-muted-foreground">CSV files only. Multiple months are supported.</p>
+            <p className="text-lg font-semibold">Drop your statement here</p>
+            <p className="mt-1 font-mono text-xs uppercase tracking-widest text-muted-foreground">
+              CSV · parsed on this device
+            </p>
           </div>
           <div className="flex flex-wrap justify-center gap-3">
             <Button type="button" disabled={isAnalyzing}>
+              <Upload className="size-4" />
               {isAnalyzing ? "Analyzing..." : "Choose files"}
             </Button>
             <Button
               type="button"
-              variant="outline"
+              variant="secondary"
               disabled={isAnalyzing}
               onClick={(event) => {
                 event.stopPropagation()
                 loadSample()
               }}
             >
-              <Sparkles className="size-4" />
+              <FileText className="size-4" />
               Load sample
             </Button>
           </div>
+          <p className="text-xs text-muted-foreground">
+            No file handy? Load a sample statement to see your dashboard in seconds.
+          </p>
         </div>
       </div>
 
       {errors.length > 0 ? (
         <div className="mt-4 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-          {errors.map((error) => (
-            <p key={error}>{error}</p>
-          ))}
+          <p className="font-medium">We couldn&apos;t read that file</p>
+          <div className="mt-1 space-y-0.5 text-destructive/90">
+            {errors.map((error) => (
+              <p key={error}>{error}</p>
+            ))}
+          </div>
+          <p className="mt-2 text-destructive/80">
+            Make sure it has Date, Description, and Amount (or Debit/Credit) columns — or try Load sample.
+          </p>
         </div>
       ) : null}
     </div>

@@ -4,15 +4,18 @@ import { useRef, useState } from "react"
 import { Upload } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { track } from "@/lib/analytics"
 import { importCsvFiles } from "@/lib/csv-import"
 import type { MoneyWorkspace } from "@/lib/moneymirror"
 
 export function ImportCsvButton({
   label = "Add more CSV",
+  className,
   onImported,
   onError,
 }: {
   label?: string
+  className?: string
   onImported: (workspace: MoneyWorkspace) => void
   onError?: (errors: string[]) => void
 }) {
@@ -25,6 +28,7 @@ export function ImportCsvButton({
     try {
       const result = await importCsvFiles(files)
       if (result.ok) {
+        track("csv_imported")
         onImported(result.workspace)
       } else {
         onError?.(result.errors)
@@ -42,6 +46,7 @@ export function ImportCsvButton({
         type="button"
         variant="outline"
         disabled={isAnalyzing}
+        className={className}
         onClick={() => inputRef.current?.click()}
       >
         <Upload className="size-4" />
