@@ -11,6 +11,7 @@ import { Bot, Send, Sparkles } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
+import { Markdown } from "@/components/markdown"
 import { createChatMessage, getAssistantReply, type ChatMessage } from "@/lib/chat"
 
 type PanelMessage = ChatMessage & { error?: boolean }
@@ -154,12 +155,17 @@ export function ChatPanel({ context }: { context?: string }) {
 
 function MessageBubble({ message }: { message: PanelMessage }) {
   const isUser = message.role === "user"
+  // Only the assistant's normal replies contain markdown; user input and error
+  // bubbles stay as literal text.
+  const renderMarkdown = !isUser && !message.error
 
   return (
     <div className={`flex items-end gap-2 ${isUser ? "justify-end" : "justify-start"}`}>
       {!isUser ? <Avatar /> : null}
       <div
-        className={`max-w-[80%] whitespace-pre-wrap rounded-2xl px-3.5 py-2.5 text-sm leading-6 ${
+        className={`max-w-[80%] rounded-2xl px-3.5 py-2.5 text-sm leading-6 ${
+          renderMarkdown ? "" : "whitespace-pre-wrap"
+        } ${
           isUser
             ? "rounded-br-sm bg-primary text-primary-foreground"
             : message.error
@@ -167,7 +173,7 @@ function MessageBubble({ message }: { message: PanelMessage }) {
               : "rounded-bl-sm bg-muted text-foreground"
         }`}
       >
-        {message.content}
+        {renderMarkdown ? <Markdown>{message.content}</Markdown> : message.content}
       </div>
     </div>
   )
