@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google"
 
 import { NovusAnalytics } from "@/components/novus-analytics"
+import { PendoInstall } from "@/components/pendo-install"
 import "./globals.css"
 
 const plexSans = IBM_Plex_Sans({
@@ -34,6 +35,7 @@ export default function RootLayout({
       <body>
         {children}
         <NovusAnalytics />
+        <PendoInstall />
       </body>
     </html>
   )
