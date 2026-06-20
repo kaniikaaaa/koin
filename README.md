@@ -63,17 +63,19 @@ OpenAI server-side), so it can't be a pure static export. Vercel needs no config
 npx vercel --prod
 ```
 
-Set `OPENAI_API_KEY` (and optionally `OPENAI_CHAT_MODEL`, `NEXT_PUBLIC_NOVUS_SRC`)
-in the Vercel project env. Without `OPENAI_API_KEY` the core local flow still
+Set `OPENAI_API_KEY` (and optionally `OPENAI_CHAT_MODEL`) in the Vercel project env. Without `OPENAI_API_KEY` the core local flow still
 works and the AI chat degrades to a friendly "assistant not configured" message
 instead of erroring. See `.env.example`.
 
 ## Analytics
 
-Product analytics is wired through `lib/analytics.ts` (a privacy-safe event
-allowlist — no financial data) and `components/novus-analytics.tsx` (loads the
-snippet from `NEXT_PUBLIC_NOVUS_SRC`). Set that env var to your Novus.ai loader
-URL to enable it; unset, it is a no-op.
+Product analytics is **Novus** (Pendo's product agent — Novus instruments the app
+with the Pendo agent). The agent is loaded in `components/pendo-install.tsx`, and
+`lib/analytics.ts` fires a privacy-safe event allowlist (`sample_loaded`,
+`csv_imported`, `dashboard_viewed`, `report_viewed`, `workspace_created`) via
+`pendo.track()` — event names only, never amounts, merchants, or categories.
+Visitors are anonymous (Pendo `_PENDO_T_…` IDs). The dashboard lives at
+`novus.pendo.io`.
 
 ## Privacy Model
 

@@ -1,16 +1,13 @@
-// Privacy-safe product analytics.
+// Privacy-safe product analytics via Pendo.
 //
 // Fires ONLY event names from the fixed allowlist below — never transaction
 // amounts, merchant names, categories, descriptions, totals, or any financial
 // data. That keeps measurement honest with the product promise: your statement
 // stays in your browser; analytics only ever learns *that* something happened.
 //
-// Wiring: set NEXT_PUBLIC_NOVUS_SRC to your Novus.ai loader URL (see
-// `components/novus-analytics.tsx`). Until then every call is a safe no-op, so
-// the app behaves identically with or without analytics installed.
-//
-// If Novus's SDK exposes a different call than `window.novus.track(name)`, adapt
-// the one line in `track()` — the event call-sites throughout the app stay the same.
+// The Pendo agent is installed in `components/pendo-install.tsx`. Its install
+// snippet defines `window.pendo.track` as a queueing stub immediately, so events
+// fired before the agent finishes loading are queued and replayed automatically.
 
 export type AnalyticsEvent =
   | "sample_loaded"
@@ -19,22 +16,11 @@ export type AnalyticsEvent =
   | "report_viewed"
   | "workspace_created"
 
-type NovusGlobal = { track?: (event: string) => void }
-
 export function track(event: AnalyticsEvent) {
   if (typeof window === "undefined") return
 
   try {
-    const novus = (window as unknown as { novus?: NovusGlobal }).novus
-    if (typeof novus?.track === "function") {
-      novus.track(event)
-      return
-    }
-
-    // Queue events so a late-loading snippet can replay them once ready.
-    const scope = window as unknown as { novusLayer?: string[] }
-    scope.novusLayer = scope.novusLayer ?? []
-    scope.novusLayer.push(event)
+    window.pendo?.track?.(event)
   } catch {
     // Analytics must never break the app.
   }

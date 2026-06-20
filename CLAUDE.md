@@ -78,7 +78,8 @@ route. Modules:
   in `SidebarInset`. Used by `/dashboard` and `/reports/[id]`.
 - `metric-card.tsx` — shared semantic metric card (mono tabular value + tone + icon),
   used by the dashboard and report metric strips
-- `novus-analytics.tsx` — injects the Novus loader from `NEXT_PUBLIC_NOVUS_SRC`
+- `pendo-install.tsx` — loads the Novus (Pendo) product agent; `lib/analytics.ts`
+  fires the privacy-safe event allowlist via `pendo.track()` (anonymous visitors)
 - `upload-dropzone.tsx` — drag/drop + file-picker upload on the home page
 - `import-csv-button.tsx` — "Add more CSV" button (file picker, appends in place)
 - `chat-panel.tsx` — dashboard chat UI

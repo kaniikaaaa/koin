@@ -1,7 +1,6 @@
 import type { Metadata } from "next"
 import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google"
 
-import { NovusAnalytics } from "@/components/novus-analytics"
 import { PendoInstall } from "@/components/pendo-install"
 import "./globals.css"
 
@@ -34,7 +33,6 @@ export default function RootLayout({
     <html lang="en" className={`dark ${plexSans.variable} ${plexMono.variable}`}>
       <body>
         {children}
-        <NovusAnalytics />
         <PendoInstall />
       </body>
     </html>
