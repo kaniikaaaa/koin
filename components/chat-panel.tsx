@@ -22,12 +22,15 @@ const SUGGESTIONS = [
   "How did this month compare to last?",
 ]
 
+const PENDO_AGENT_ID = "7WoEFjwNhnzEeHy-z6m-q0g-QBM"
+
 export function ChatPanel({ context }: { context?: string }) {
   const [messages, setMessages] = useState<PanelMessage[]>([])
   const [input, setInput] = useState("")
   const [isReplying, setIsReplying] = useState(false)
   const listRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const conversationIdRef = useRef(crypto.randomUUID())
 
   // Keep the conversation scrolled to the newest message.
   useEffect(() => {
@@ -47,14 +50,32 @@ export function ChatPanel({ context }: { context?: string }) {
     const content = (text ?? input).trim()
     if (!content || isReplying) return
 
-    const nextMessages: PanelMessage[] = [...messages, createChatMessage("user", content)]
+    const userMessage = createChatMessage("user", content)
+    const nextMessages: PanelMessage[] = [...messages, userMessage]
     setMessages(nextMessages)
     setInput("")
     setIsReplying(true)
 
+    window.pendo?.trackAgent("prompt", {
+      agentId: PENDO_AGENT_ID,
+      conversationId: conversationIdRef.current,
+      messageId: userMessage.id,
+      content,
+      suggestedPrompt: text != null && SUGGESTIONS.includes(text),
+    })
+
     try {
       const reply = await getAssistantReply(nextMessages, context)
-      setMessages((current) => [...current, createChatMessage("assistant", reply)])
+      const assistantMessage = createChatMessage("assistant", reply)
+      setMessages((current) => [...current, assistantMessage])
+
+      window.pendo?.trackAgent("agent_response", {
+        agentId: PENDO_AGENT_ID,
+        conversationId: conversationIdRef.current,
+        messageId: assistantMessage.id,
+        content: reply,
+        modelUsed: "gpt-4o-mini",
+      })
     } catch (error) {
       console.error("Chat request failed:", error)
       const message =
