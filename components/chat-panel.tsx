@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Markdown } from "@/components/markdown"
 import { createChatMessage, getAssistantReply, type ChatMessage } from "@/lib/chat"
+import { pendoTrack } from "@/lib/pendo"
 
 type PanelMessage = ChatMessage & { error?: boolean }
 
@@ -47,16 +48,35 @@ export function ChatPanel({ context }: { context?: string }) {
     const content = (text ?? input).trim()
     if (!content || isReplying) return
 
+    const isSuggestion = text !== undefined
     const nextMessages: PanelMessage[] = [...messages, createChatMessage("user", content)]
     setMessages(nextMessages)
     setInput("")
     setIsReplying(true)
 
+    pendoTrack("chat_message_sent", {
+      messageLength: content.length,
+      conversationLength: nextMessages.length,
+      isSuggestion,
+      hasFinancialContext: Boolean(context),
+    })
+
     try {
       const reply = await getAssistantReply(nextMessages, context)
       setMessages((current) => [...current, createChatMessage("assistant", reply)])
+      pendoTrack("chat_reply_received", {
+        replyLength: reply.length,
+        conversationLength: nextMessages.length + 1,
+        success: true,
+        hasFinancialContext: Boolean(context),
+      })
     } catch (error) {
       console.error("Chat request failed:", error)
+      pendoTrack("chat_reply_received", {
+        conversationLength: nextMessages.length,
+        success: false,
+        hasFinancialContext: Boolean(context),
+      })
       const message =
         "I can't reach the assistant right now — the numbers in your dashboard above are still accurate. Try again in a moment."
       setMessages((current) => [...current, { ...createChatMessage("assistant", message), error: true }])

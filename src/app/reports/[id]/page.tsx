@@ -8,6 +8,7 @@ import { AppShell } from "@/components/app-shell"
 import { MetricCard } from "@/components/metric-card"
 import { Button } from "@/components/ui/button"
 import { track } from "@/lib/analytics"
+import { pendoTrack } from "@/lib/pendo"
 import {
   Table,
   TableBody,
@@ -38,8 +39,15 @@ export default function ReportPage() {
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      setWorkspace(loadWorkspace())
+      const ws = loadWorkspace()
+      setWorkspace(ws)
       track("report_viewed")
+      const txns = getWorkspaceTransactions(ws)
+      pendoTrack("report_viewed", {
+        transactionCount: txns.length,
+        monthCount: new Set(txns.map((t) => t.monthKey)).size,
+        hasData: txns.length > 0,
+      })
     }, 0)
 
     return () => window.clearTimeout(timer)

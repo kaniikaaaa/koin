@@ -6,6 +6,7 @@ import { FileSpreadsheet, FileText, Upload } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { track } from "@/lib/analytics"
+import { pendoTrack } from "@/lib/pendo"
 import { analyzeSampleCsvs } from "@/lib/moneymirror"
 import { importCsvFiles } from "@/lib/csv-import"
 import {
@@ -28,9 +29,21 @@ export function UploadDropzone() {
       const result = await importCsvFiles(files)
       if (result.ok) {
         track("csv_imported")
+        pendoTrack("csv_imported", {
+          fileCount: files.length,
+          transactionCount: Object.keys(result.workspace.transactionsById).length,
+          sourceName: result.sourceName,
+          importSource: "dropzone",
+        })
         router.push("/dashboard")
       } else {
         setErrors(result.errors)
+        pendoTrack("csv_import_failed", {
+          errorCount: result.errors.length,
+          errorMessages: result.errors.join("; ").slice(0, 256),
+          fileCount: files.length,
+          importSource: "dropzone",
+        })
       }
     } finally {
       setIsAnalyzing(false)

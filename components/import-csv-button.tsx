@@ -5,6 +5,7 @@ import { Upload } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { track } from "@/lib/analytics"
+import { pendoTrack } from "@/lib/pendo"
 import { importCsvFiles } from "@/lib/csv-import"
 import type { MoneyWorkspace } from "@/lib/moneymirror"
 
@@ -29,8 +30,20 @@ export function ImportCsvButton({
       const result = await importCsvFiles(files)
       if (result.ok) {
         track("csv_imported")
+        pendoTrack("csv_imported", {
+          fileCount: files.length,
+          transactionCount: Object.keys(result.workspace.transactionsById).length,
+          sourceName: result.sourceName,
+          importSource: "dashboard",
+        })
         onImported(result.workspace)
       } else {
+        pendoTrack("csv_import_failed", {
+          errorCount: result.errors.length,
+          errorMessages: result.errors.join("; ").slice(0, 256),
+          fileCount: files.length,
+          importSource: "dashboard",
+        })
         onError?.(result.errors)
       }
     } finally {
