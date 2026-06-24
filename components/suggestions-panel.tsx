@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { getAiSuggestions } from "@/lib/suggestions"
+import { pendoTrack } from "@/lib/pendo"
 import type { MonthlySuggestion } from "@/lib/moneymirror"
 
 type LoadStatus = "idle" | "loading" | "done" | "error"
@@ -38,6 +39,7 @@ function withMinimum(primary: MonthlySuggestion[], fallback: MonthlySuggestion[]
 // Cache tips per (month, summary) so Strict-Mode double-mounts and revisits don't
 // fire duplicate paid OpenAI calls. Failures are evicted so they can retry.
 const tipsCache = new Map<string, Promise<MonthlySuggestion[]>>()
+const trackedTipKeys = new Set<string>()
 
 function fetchTips(context: string, monthLabel?: string) {
   const key = `${monthLabel ?? ""}::${context}`
@@ -74,6 +76,15 @@ export function SuggestionsPanel({
         if (cancelled) return
         setAiTips(tips)
         setStatus("done")
+        const tipKey = `${monthLabel ?? ""}::${context}`
+        if (!trackedTipKeys.has(tipKey)) {
+          trackedTipKeys.add(tipKey)
+          pendoTrack("ai_suggestions_generated", {
+            tipCount: tips.length,
+            monthLabel: monthLabel ?? "",
+            source: "ai",
+          })
+        }
       })
       .catch(() => {
         if (!cancelled) setStatus("error")

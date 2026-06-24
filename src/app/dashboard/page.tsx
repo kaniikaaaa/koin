@@ -22,6 +22,7 @@ import { ImportCsvButton } from "@/components/import-csv-button"
 import { MetricCard } from "@/components/metric-card"
 import { SuggestionsPanel } from "@/components/suggestions-panel"
 import { track } from "@/lib/analytics"
+import { pendoTrack } from "@/lib/pendo"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
@@ -209,11 +210,17 @@ export default function DashboardPage() {
       const stored = loadWorkspace()
       setWorkspace(stored)
       setIsLoaded(true)
+      const txns = getWorkspaceTransactions(stored)
 
-      if (getWorkspaceTransactions(stored).length === 0) {
+      if (txns.length === 0) {
         router.replace("/")
       } else {
         track("dashboard_viewed")
+        pendoTrack("dashboard_viewed", {
+          transactionCount: txns.length,
+          monthCount: new Set(txns.map((t) => t.monthKey)).size,
+          statementCount: stored.statements.length,
+        })
       }
     }, 0)
 
@@ -227,6 +234,11 @@ export default function DashboardPage() {
     setImportErrors([])
     setWorkspace(next)
     track("sample_loaded")
+    pendoTrack("sample_loaded", {
+      mode: "multi",
+      loadSource: "dashboard",
+      transactionCount: getWorkspaceTransactions(next).length,
+    })
   }
 
   function handleImported(next: MoneyWorkspace) {
@@ -237,6 +249,11 @@ export default function DashboardPage() {
   function createNew() {
     clearMoneyMirrorData()
     track("workspace_created")
+    pendoTrack("workspace_created", {
+      previousTransactionCount: transactions.length,
+      previousStatementCount: workspace?.statements.length ?? 0,
+      previousMonthCount: monthlyMetrics.length,
+    })
     router.push("/")
   }
 
